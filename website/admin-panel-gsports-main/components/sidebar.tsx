@@ -8,9 +8,7 @@ import {
   LayoutDashboard,
   Calendar,
   CheckSquare,
-  BarChart3,
-  Eye,
-  Settings,
+  Database,
   LogOut,
   Menu,
   X,
@@ -22,14 +20,12 @@ const adminMenuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/bookings', label: 'Bookings', icon: CheckSquare },
   { href: '/classes', label: 'Classes', icon: Calendar },
-  { href: '/kpi', label: 'KPI Analytics', icon: BarChart3 },
-  { href: '/monitoring', label: 'Monitoring', icon: Eye },
+  { href: '/bigdata', label: 'Big Data', icon: Database },
 ];
 
 const instructorMenuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/classes', label: 'My Classes', icon: Calendar },
-  { href: '/monitoring', label: 'Attendance', icon: Eye },
 ];
 
 export function Sidebar() {
