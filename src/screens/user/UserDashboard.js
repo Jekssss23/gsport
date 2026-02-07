@@ -89,21 +89,21 @@ export default function UserDashboard({ navigation }) {
           title="Field Reservation" 
           icon="calendar" 
           route="FieldReservation"
-          gradientColors={['#FF0000', '#990000']} 
+          gradientColors={['#FF0000', '#CC0000']} 
         />
-        
+
         <DashboardCard 
-          title="Class Schedule" 
+          title="My Reservations" 
           icon="time" 
-          route="ClassSchedule"
-          gradientColors={['#333333', '#000000']} 
-        />
-        
-        <DashboardCard 
-          title="My History" 
-          icon="bookmarks" 
           route="MyReservationHistory"
           gradientColors={['#333333', '#000000']} 
+        />
+
+        <DashboardCard 
+          title="Class Schedule" 
+          icon="list" 
+          route="ClassSchedule"
+          gradientColors={['#1a1a1a', '#000000']} 
         />
 
         <View style={styles.promoCard}>
@@ -111,8 +111,8 @@ export default function UserDashboard({ navigation }) {
             colors={['#1a1a1a', '#000000']}
             style={styles.promoContent}
           >
-            <Text style={styles.promoTitle}>Upcoming Events</Text>
-            <Text style={styles.promoText}>Join our summer tournament!</Text>
+            <Text style={styles.promoTitle}>Welcome to G Sports Center</Text>
+            <Text style={styles.promoText}>Book your favorite sports facilities now!</Text>
           </LinearGradient>
         </View>
       </ScrollView>

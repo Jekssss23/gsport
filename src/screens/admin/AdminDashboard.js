@@ -83,35 +83,11 @@ export default function AdminDashboard({ navigation }) {
         <Text style={styles.sectionTitle}>Manajemen Dashboard</Text>
         
         <AdminCard 
-          title="Terima Reservasi" 
-          description="Tinjau & terima reservasi"
-          icon="checkmark-circle" 
-          route="ReservationAccept"
-          gradientColors={['#FF0000', '#CC0000']} 
-        />
-        
-        <AdminCard 
           title="Absensi" 
           description="Catat kehadiran member"
           icon="finger-print" 
           route="Attendance"
           gradientColors={['#333333', '#000000']} 
-        />
-        
-        <AdminCard 
-          title="Jadwal Kelas" 
-          description="Buat & kelola jadwal"
-          icon="calendar" 
-          route="ClassScheduling"
-          gradientColors={['#FF0000', '#990000']} 
-        />
-        
-        <AdminCard 
-          title="Riwayat User" 
-          description="Lihat semua riwayat reservasi"
-          icon="time" 
-          route="UserReservationHistory"
-          gradientColors={['#1a1a1a', '#000000']} 
         />
 
         <View style={styles.statsCard}>
@@ -119,15 +95,15 @@ export default function AdminDashboard({ navigation }) {
             colors={['rgba(255,0,0,0.1)', 'rgba(0,0,0,0.3)']}
             style={styles.statsContent}
           >
-            <Text style={styles.statsTitle}>Statistik Cepat</Text>
+            <Text style={styles.statsTitle}>Statistik Absensi</Text>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
                 <Text style={styles.statNumber}>12</Text>
-                <Text style={styles.statLabel}>Pending</Text>
+                <Text style={styles.statLabel}>Hari Ini</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statNumber}>45</Text>
-                <Text style={styles.statLabel}>Hari Ini</Text>
+                <Text style={styles.statLabel}>Minggu Ini</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statNumber}>156</Text>

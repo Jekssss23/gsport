@@ -22,20 +22,47 @@ export default function RegisterScreen({ navigation }) {
 
     setLoading(true);
     try {
+      console.log('Starting registration...');
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+      console.log('User created successfully:', user.uid);
 
       // Save user data to Firestore - semua registrasi otomatis jadi user
-      await setDoc(doc(db, 'users', user.uid), {
+      const userData = {
         email: user.email,
         name: name,
         role: 'user', // Semua registrasi baru otomatis jadi user
         createdAt: new Date().toISOString(),
-      });
+      };
+      
+      console.log('Saving user data to Firestore:', userData);
+      await setDoc(doc(db, 'users', user.uid), userData);
+      console.log('User data saved successfully to Firestore');
 
       Alert.alert('Success', 'Account created successfully!');
     } catch (error) {
-      Alert.alert('Registration Error', error.message);
+      console.error('Registration error details:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      
+      let errorMessage = 'Registration failed';
+      
+      // Provide more specific error messages
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'Email already in use';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password is too weak';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address';
+      } else if (error.code === 'permission-denied') {
+        errorMessage = 'Permission denied. Check Firestore security rules.';
+      } else if (error.code === 'unavailable') {
+        errorMessage = 'Service unavailable. Please check your internet connection.';
+      } else {
+        errorMessage = error.message || 'An unknown error occurred';
+      }
+      
+      Alert.alert('Registration Error', errorMessage);
     } finally {
       setLoading(false);
     }

@@ -15,7 +15,7 @@ import RegisterScreen from './src/screens/RegisterScreen';
 // Admin Screens
 import AdminDashboard from './src/screens/admin/AdminDashboard';
 import ReservationAcceptScreen from './src/screens/admin/ReservationAcceptScreen';
-import AttendanceScreen from './src/screens/admin/AttendanceScreen';
+import AdminAttendanceScreen from './src/screens/admin/AttendanceScreen';
 import ClassSchedulingScreen from './src/screens/admin/ClassSchedulingScreen';
 import UserReservationHistoryScreen from './src/screens/admin/UserReservationHistoryScreen';
 
@@ -24,6 +24,7 @@ import UserDashboard from './src/screens/user/UserDashboard';
 import FieldReservationScreen from './src/screens/user/FieldReservationScreen';
 import ClassScheduleScreen from './src/screens/user/ClassScheduleScreen';
 import MyReservationHistoryScreen from './src/screens/user/MyReservationHistoryScreen';
+import UserAttendanceScreen from './src/screens/user/AttendanceScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -42,7 +43,7 @@ function AdminStack() {
     <Stack.Navigator>
       <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ title: 'Admin Dashboard' }} />
       <Stack.Screen name="ReservationAccept" component={ReservationAcceptScreen} options={{ title: 'Accept Reservations' }} />
-      <Stack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
+      <Stack.Screen name="Attendance" component={AdminAttendanceScreen} options={{ title: 'Attendance' }} />
       <Stack.Screen name="ClassScheduling" component={ClassSchedulingScreen} options={{ title: 'Schedule Class' }} />
       <Stack.Screen name="UserReservationHistory" component={UserReservationHistoryScreen} options={{ title: 'User History' }} />
     </Stack.Navigator>
@@ -53,6 +54,7 @@ function UserStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="UserDashboard" component={UserDashboard} options={{ title: 'User Dashboard' }} />
+      <Stack.Screen name="Attendance" component={UserAttendanceScreen} options={{ headerShown: false }} />
       <Stack.Screen name="FieldReservation" component={FieldReservationScreen} options={{ title: 'Reserve Field' }} />
       <Stack.Screen name="ClassSchedule" component={ClassScheduleScreen} options={{ title: 'Class Schedule' }} />
       <Stack.Screen name="MyReservationHistory" component={MyReservationHistoryScreen} options={{ title: 'My History' }} />
