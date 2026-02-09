@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, ImageBackground } from 'react-native';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase.js';
 import { theme } from '../styles/theme.js';
 import LottieView from 'lottie-react-native';
@@ -21,48 +21,19 @@ export default function LoginScreen({ navigation }) {
 
     setLoading(true);
     try {
-      // Cek apakah ini akun admin khusus
-      if (email === 'admin@gsports.com' && password === 'admin123') {
-        try {
-          // Coba login dulu
-          const userCredential = await signInWithEmailAndPassword(auth, email, password);
-          const user = userCredential.user;
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
 
-          // Pastikan data admin ada di Firestore
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (!userDoc.exists()) {
-            await setDoc(doc(db, 'users', user.uid), {
-              email: user.email,
-              name: 'Administrator',
-              role: 'admin',
-              createdAt: new Date().toISOString(),
-            });
-          }
-        } catch (loginError) {
-          // Jika akun belum ada, buat akun admin baru
-          if (loginError.code === 'auth/user-not-found' || loginError.code === 'auth/invalid-credential') {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (!userDoc.exists()) {
+        Alert.alert('Error', 'User data not found');
+        return;
+      }
 
-            await setDoc(doc(db, 'users', user.uid), {
-              email: user.email,
-              name: 'Administrator',
-              role: 'admin',
-              createdAt: new Date().toISOString(),
-            });
-          } else {
-            throw loginError;
-          }
-        }
-      } else {
-        // Login normal untuk user biasa
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (!userDoc.exists()) {
-          Alert.alert('Error', 'User data not found');
-        }
+      const role = userDoc.data()?.role;
+      if (role !== 'admin' && role !== 'user') {
+        Alert.alert('Error', 'Invalid account role');
+        return;
       }
     } catch (error) {
       Alert.alert('Login Error', error.message);

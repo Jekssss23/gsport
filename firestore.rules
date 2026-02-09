@@ -59,6 +59,27 @@ service cloud.firestore {
       allow create: if request.auth != null;
       allow update: if request.auth != null;
     }
+
+    // Attendances collection rules (web Manage Absen)
+    match /attendances/{attendanceId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Attendances archive (admin only)
+    match /attendances_archive/{archiveId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // KPI assessments (admin only)
+    match /kpi_assessments/{assessmentId} {
+      allow read, create, update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
     
     // Default deny all other access
     match /{document=**} {

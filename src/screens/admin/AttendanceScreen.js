@@ -4,8 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { theme } from '../../styles/theme';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { collection, addDoc, doc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../../config/firebase';
 
 const { width } = Dimensions.get('window');
 
@@ -196,10 +196,47 @@ export default function AttendanceScreen() {
 
     // Here you would save attendance to Firebase
     try {
-      // TODO: Save attendance data to Firebase
+      if (!auth.currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      const userUid = auth.currentUser.uid;
+      const userEmail = auth.currentUser.email || '';
+
+      const userDoc = await getDoc(doc(db, 'users', userUid));
+      const userData = userDoc.exists() ? userDoc.data() : {};
+
+      const employeeName = userData?.name || 'Unknown';
+      const employeeId = userData?.employeeId || userUid;
+
+      const dateStr = now.toISOString().split('T')[0];
+      const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      await addDoc(collection(db, 'attendances'), {
+        employeeId,
+        employeeUid: userUid,
+        employeeName,
+        employeeEmail: userEmail,
+        date: dateStr,
+        checkIn: timeStr,
+        checkOut: null,
+        status: 'hadir',
+        location: currentLocation
+          ? {
+              latitude: currentLocation.latitude,
+              longitude: currentLocation.longitude,
+            }
+          : null,
+        distanceMeters: typeof distance === 'number' ? distance : null,
+        radiusMeters: attendanceSettings?.radius ?? null,
+        locationName: attendanceSettings?.locationName ?? null,
+        createdAt: serverTimestamp(),
+      });
+
       console.log('Attendance recorded successfully');
     } catch (error) {
       console.error('Error saving attendance:', error);
+      Alert.alert('Error', 'Absensi berhasil tapi gagal menyimpan data ke database. Coba lagi.');
     }
   };
 
