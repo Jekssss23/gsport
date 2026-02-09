@@ -2,22 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { KPICard } from '@/components/kpi-card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DollarSign, TrendingUp, Users, Calendar, Activity, BarChart3 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
-
-interface KPIMetrics {
-  totalBookings: number;
-  totalRevenue: number;
-  memberRegistrations: number;
-  averageAttendance: number;
-  facilityUtilization: number;
-  memberGrowth: number;
-}
+import Link from 'next/link';
 
 interface Employee {
   id: string;
@@ -26,17 +16,9 @@ interface Employee {
   imageUrl: string;
 }
 
-const DIVISIONS = ['All', 'Sports', 'Caffe', 'Entertain', 'GRO', 'HK', 'Marketing', 'Security'];
+const DIVISIONS = ['All', 'Sports', 'Caffe', 'Entertain', 'GRO', 'HK', 'Marketing', 'Security', 'Maintenance'];
 
 export default function BigDataKPIPage() {
-  const [metrics, setMetrics] = useState<KPIMetrics>({
-    totalBookings: 0,
-    totalRevenue: 0,
-    memberRegistrations: 0,
-    averageAttendance: 0,
-    facilityUtilization: 0,
-    memberGrowth: 0,
-  });
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedDivision, setSelectedDivision] = useState('All');
   const [loading, setLoading] = useState(true);
@@ -44,34 +26,15 @@ export default function BigDataKPIPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const bookingsRef = collection(db, 'bookings');
-        const bookingsSnap = await getDocs(bookingsRef);
-        const totalBookings = bookingsSnap.size;
-        const totalRevenue = bookingsSnap.docs.reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
-
         const employeesRef = collection(db, 'employees');
         const employeesSnap = await getDocs(employeesRef);
-        const memberRegistrations = employeesSnap.size;
         const employeesData = employeesSnap.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as Employee[];
-
-        const attendanceRef = collection(db, 'attendance');
-        const attendanceSnap = await getDocs(attendanceRef);
-        const averageAttendance = attendanceSnap.size > 0 ? 82 : 0;
-
-        setMetrics({
-          totalBookings,
-          totalRevenue,
-          memberRegistrations,
-          averageAttendance,
-          facilityUtilization: 78,
-          memberGrowth: 12,
-        });
         setEmployees(employeesData);
       } catch (error) {
-        console.error('Error fetching metrics:', error);
+        console.error('Error fetching KPI employees:', error);
       } finally {
         setLoading(false);
       }
@@ -105,51 +68,6 @@ export default function BigDataKPIPage() {
       <div>
         <h1 className="text-3xl font-bold text-white mb-2">KPI Analytics</h1>
         <p className="text-gray-400">Key Performance Indicators</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <KPICard
-          title="Total Bookings"
-          value={metrics.totalBookings}
-          subtitle="All time"
-          icon={Calendar}
-          change={{ value: 15, isPositive: true }}
-        />
-        <KPICard
-          title="Revenue Generated"
-          value={`Rp ${(metrics.totalRevenue / 1000000).toFixed(1)}M`}
-          subtitle="Total revenue"
-          icon={DollarSign}
-          change={{ value: 22, isPositive: true }}
-        />
-        <KPICard
-          title="Member Registrations"
-          value={metrics.memberRegistrations}
-          subtitle="Active members"
-          icon={Users}
-          change={{ value: 8, isPositive: true }}
-        />
-        <KPICard
-          title="Average Attendance"
-          value={`${metrics.averageAttendance}%`}
-          subtitle="Class attendance rate"
-          icon={Activity}
-          change={{ value: 5, isPositive: true }}
-        />
-        <KPICard
-          title="Facility Utilization"
-          value={`${metrics.facilityUtilization}%`}
-          subtitle="This month"
-          icon={BarChart3}
-          change={{ value: 3, isPositive: false }}
-        />
-        <KPICard
-          title="Member Growth"
-          value={`${metrics.memberGrowth}%`}
-          subtitle="Monthly growth"
-          icon={TrendingUp}
-          change={{ value: 12, isPositive: true }}
-        />
       </div>
 
       {/* Employee Count by Division */}
@@ -212,7 +130,11 @@ export default function BigDataKPIPage() {
                       </h3>
                       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                         {divEmployees.map((emp) => (
-                          <div key={emp.id} className="flex flex-col items-center text-center space-y-2">
+                          <Link
+                            key={emp.id}
+                            href={`/bigdata/kpi/${emp.id}`}
+                            className="flex flex-col items-center text-center space-y-2 hover:opacity-90"
+                          >
                             <div className="relative w-24 h-24 rounded-lg overflow-hidden bg-gray-700">
                               {emp.imageUrl ? (
                                 <Image src={emp.imageUrl} alt={emp.name} fill className="object-contain" />
@@ -226,7 +148,7 @@ export default function BigDataKPIPage() {
                               <p className="text-sm font-medium text-white">{emp.name}</p>
                               <p className="text-xs text-gray-400">{emp.divisi}</p>
                             </div>
-                          </div>
+                          </Link>
                         ))}
                       </div>
                     </div>
@@ -236,7 +158,11 @@ export default function BigDataKPIPage() {
                 // Show filtered division
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                   {filteredEmployees.map((emp) => (
-                    <div key={emp.id} className="flex flex-col items-center text-center space-y-2">
+                    <Link
+                      key={emp.id}
+                      href={`/bigdata/kpi/${emp.id}`}
+                      className="flex flex-col items-center text-center space-y-2 hover:opacity-90"
+                    >
                       <div className="relative w-24 h-24 rounded-lg overflow-hidden bg-gray-700">
                         {emp.imageUrl ? (
                           <Image src={emp.imageUrl} alt={emp.name} fill className="object-contain" />
@@ -250,40 +176,12 @@ export default function BigDataKPIPage() {
                         <p className="text-sm font-medium text-white">{emp.name}</p>
                         <p className="text-xs text-gray-400">{emp.divisi}</p>
                       </div>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card className="bg-black/40 border-red-500/20">
-        <CardHeader>
-          <CardTitle className="text-white">Key Metrics Summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-1">
-              <p className="text-sm text-gray-400">Avg Booking Value</p>
-              <p className="text-xl font-bold text-white">
-                Rp {metrics.totalBookings > 0 ? (metrics.totalRevenue / metrics.totalBookings).toLocaleString() : 0}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-gray-400">Peak Hour</p>
-              <p className="text-xl font-bold text-white">6:00 PM - 7:00 PM</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-gray-400">Most Popular Class</p>
-              <p className="text-xl font-bold text-white">Morning Fitness</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-gray-400">Member Retention</p>
-              <p className="text-xl font-bold text-white">87%</p>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

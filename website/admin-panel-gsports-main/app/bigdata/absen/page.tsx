@@ -10,9 +10,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MapPin, Download, Search, Settings } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, setDoc, getDoc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, getDoc, query, orderBy, writeBatch } from 'firebase/firestore';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const LocationMap = dynamic(
   () => import('@/components/location-map').then((mod) => ({ default: mod.LocationMap })),
@@ -52,6 +54,7 @@ export default function BigDataAbsenPage() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -132,6 +135,88 @@ export default function BigDataAbsenPage() {
     const matchStatus = filterStatus === 'all' || att.status === filterStatus;
     return matchSearch && matchStatus;
   });
+
+  const exportToPDF = () => {
+    try {
+      const docPdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+      const today = new Date();
+      const dateLabel = today.toLocaleDateString('id-ID', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+
+      docPdf.setFontSize(16);
+      docPdf.text('Laporan Absensi Karyawan', 40, 50);
+      docPdf.setFontSize(10);
+      docPdf.text(`Tanggal cetak: ${dateLabel}`, 40, 68);
+      docPdf.text(`Lokasi: ${settings.locationName} | Radius: ${settings.radius}m`, 40, 82);
+
+      const rows = filteredAttendances.map((att) => [
+        att.employeeName,
+        att.date,
+        att.checkIn,
+        att.checkOut || '-',
+        att.status,
+      ]);
+
+      autoTable(docPdf, {
+        startY: 100,
+        head: [['Nama Karyawan', 'Tanggal', 'Check In', 'Check Out', 'Status']],
+        body: rows,
+        theme: 'grid',
+        styles: {
+          fontSize: 9,
+          cellPadding: 6,
+        },
+        headStyles: {
+          fillColor: [220, 38, 38],
+          textColor: [255, 255, 255],
+        },
+      });
+
+      const fileDate = new Date().toISOString().split('T')[0];
+      docPdf.save(`absensi-${fileDate}.pdf`);
+      toast.success('PDF berhasil diunduh');
+    } catch (e) {
+      console.error('Export PDF error:', e);
+      toast.error('Gagal export PDF');
+    }
+  };
+
+  const archiveToday = async () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todays = attendances.filter((a) => a.date === todayStr);
+
+    if (todays.length === 0) {
+      toast.error('Tidak ada data absensi hari ini untuk diarsipkan');
+      return;
+    }
+
+    if (!confirm(`Arsipkan ${todays.length} data absensi hari ini? Data akan dipindahkan ke arsip.`)) return;
+
+    setArchiving(true);
+    try {
+      const batch = writeBatch(db);
+      todays.forEach((att) => {
+        const srcRef = doc(db, 'attendances', att.id);
+        const dstRef = doc(db, 'attendances_archive', `${todayStr}_${att.id}`);
+        batch.set(dstRef, {
+          ...att,
+          archivedAt: new Date().toISOString(),
+        });
+        batch.delete(srcRef);
+      });
+      await batch.commit();
+      toast.success('Absensi hari ini berhasil diarsipkan');
+      fetchAttendances();
+    } catch (e) {
+      console.error('Archive error:', e);
+      toast.error('Gagal mengarsipkan absensi');
+    } finally {
+      setArchiving(false);
+    }
+  };
 
   const todayAttendances = attendances.filter(att => att.date === new Date().toISOString().split('T')[0]);
   const statusCounts = {
@@ -262,9 +347,21 @@ export default function BigDataAbsenPage() {
               </div>
             </DialogContent>
           </Dialog>
-          <Button variant="outline" className="border-red-500/30 text-white hover:bg-red-500/20 gap-2">
+          <Button
+            variant="outline"
+            className="border-red-500/30 text-white hover:bg-red-500/20 gap-2"
+            onClick={exportToPDF}
+          >
             <Download size={16} />
-            Export Data
+            Export PDF
+          </Button>
+          <Button
+            variant="outline"
+            className="border-red-500/30 text-white hover:bg-red-500/20"
+            onClick={archiveToday}
+            disabled={archiving}
+          >
+            {archiving ? 'Mengarsipkan...' : 'Arsipkan Hari Ini'}
           </Button>
         </div>
       </div>

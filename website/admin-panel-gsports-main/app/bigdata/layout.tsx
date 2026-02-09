@@ -3,14 +3,16 @@
 import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { BarChart3, Eye, Users, ClipboardCheck, LogOut } from 'lucide-react';
+import { BarChart3, Eye, Users, ClipboardCheck, Archive, ListChecks, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const bigDataMenuItems = [
   { href: '/bigdata/kpi', label: 'KPI Analytics', icon: BarChart3 },
+  { href: '/bigdata/kpi-penilaian', label: 'Rekap KPI', icon: ListChecks },
   { href: '/bigdata/monitoring', label: 'Monitoring', icon: Eye },
   { href: '/bigdata/karyawan', label: 'Manage Karyawan', icon: Users },
   { href: '/bigdata/absen', label: 'Manage Absen', icon: ClipboardCheck },
+  { href: '/bigdata/absen-arsip', label: 'Arsip Absen', icon: Archive },
 ];
 
 export default function BigDataLayout({ children }: { children: React.ReactNode }) {

@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, Trash2, Loader2, Eye } from 'lucide-react';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { uploadToCloudinary } from '@/lib/cloudinary';
 import { ImageCropper } from '@/components/image-cropper';
@@ -21,6 +21,9 @@ interface Employee {
   name: string;
   divisi: string;
   imageUrl: string;
+  email?: string;
+  authUid?: string;
+  hasAccount?: boolean;
   createdAt: any;
 }
 
@@ -30,12 +33,20 @@ export default function BigDataKaryawanPage() {
   const [isOpen, setIsOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [selectedEmployeeForAccount, setSelectedEmployeeForAccount] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [creatingAccount, setCreatingAccount] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
     divisi: '',
+  });
+
+  const [accountForm, setAccountForm] = useState({
+    email: '',
+    password: '',
   });
   const [croppedImage, setCroppedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState('');
@@ -120,6 +131,65 @@ export default function BigDataKaryawanPage() {
     setDetailOpen(true);
   };
 
+  const handleOpenCreateAccount = (emp: Employee) => {
+    setSelectedEmployeeForAccount(emp);
+    setAccountForm({
+      email: emp.email || '',
+      password: '',
+    });
+    setAccountOpen(true);
+  };
+
+  const handleCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEmployeeForAccount) return;
+
+    if (!auth.currentUser) {
+      toast.error('Anda harus login terlebih dahulu');
+      return;
+    }
+
+    if (!accountForm.email || !accountForm.password) {
+      toast.error('Email dan password wajib diisi');
+      return;
+    }
+
+    setCreatingAccount(true);
+    try {
+      const token = await auth.currentUser.getIdToken();
+
+      const res = await fetch('/api/employees/create-account', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          employeeId: selectedEmployeeForAccount.id,
+          email: accountForm.email,
+          password: accountForm.password,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || 'Gagal membuat akun');
+        return;
+      }
+
+      toast.success('Akun login APK berhasil dibuat!');
+      setAccountOpen(false);
+      setSelectedEmployeeForAccount(null);
+      setAccountForm({ email: '', password: '' });
+      fetchEmployees();
+    } catch (error) {
+      console.error('Error creating account:', error);
+      toast.error('Gagal membuat akun');
+    } finally {
+      setCreatingAccount(false);
+    }
+  };
+
   const resetForm = () => {
     setFormData({ name: '', divisi: '' });
     setCroppedImage(null);
@@ -178,6 +248,7 @@ export default function BigDataKaryawanPage() {
                     <SelectItem value="HK" className="text-white hover:bg-red-500/20">HK</SelectItem>
                     <SelectItem value="Marketing" className="text-white hover:bg-red-500/20">Marketing</SelectItem>
                     <SelectItem value="Security" className="text-white hover:bg-red-500/20">Security</SelectItem>
+                    <SelectItem value="Maintenance" className="text-white hover:bg-red-500/20">Maintenance</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -258,6 +329,11 @@ export default function BigDataKaryawanPage() {
                       <Badge className="mt-1 bg-red-500/20 text-red-400 border border-red-500/30">
                         {emp.divisi}
                       </Badge>
+                      {emp.authUid ? (
+                        <p className="text-xs text-green-400 mt-2">Akun APK: Aktif</p>
+                      ) : (
+                        <p className="text-xs text-gray-400 mt-2">Akun APK: Belum dibuat</p>
+                      )}
                     </div>
                     <div className="flex gap-2 w-full">
                       <Button
@@ -268,6 +344,15 @@ export default function BigDataKaryawanPage() {
                       >
                         <Eye size={14} className="mr-1" />
                         Detail
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 border-red-500/30 text-white hover:bg-red-500/20"
+                        onClick={() => handleOpenCreateAccount(emp)}
+                        disabled={!!emp.authUid}
+                      >
+                        Buat Akun
                       </Button>
                       <Button
                         size="sm"
@@ -337,6 +422,59 @@ export default function BigDataKaryawanPage() {
                 </div>
               </div>
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create APK Account Dialog */}
+      <Dialog open={accountOpen} onOpenChange={setAccountOpen}>
+        <DialogContent className="bg-black border-red-500/20 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">Buat Akun Login APK</DialogTitle>
+          </DialogHeader>
+          {selectedEmployeeForAccount && (
+            <form onSubmit={handleCreateAccount} className="space-y-4">
+              <div className="bg-black/40 p-4 rounded-lg border border-red-500/20">
+                <p className="text-sm text-gray-400">Karyawan</p>
+                <p className="text-lg font-semibold text-white">{selectedEmployeeForAccount.name}</p>
+                <p className="text-xs text-gray-400 mt-1">Divisi: {selectedEmployeeForAccount.divisi}</p>
+              </div>
+
+              <div>
+                <Label className="text-white">Email</Label>
+                <Input
+                  required
+                  value={accountForm.email}
+                  onChange={(e) => setAccountForm({ ...accountForm, email: e.target.value })}
+                  className="bg-black/20 border-red-500/30 text-white"
+                  placeholder="email karyawan"
+                />
+              </div>
+
+              <div>
+                <Label className="text-white">Password</Label>
+                <Input
+                  required
+                  type="password"
+                  value={accountForm.password}
+                  onChange={(e) => setAccountForm({ ...accountForm, password: e.target.value })}
+                  className="bg-black/20 border-red-500/30 text-white"
+                  placeholder="password"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={creatingAccount}
+                className="w-full bg-red-500 hover:bg-red-600 text-white"
+              >
+                {creatingAccount ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Membuat...</>
+                ) : (
+                  'Buat Akun'
+                )}
+              </Button>
+            </form>
           )}
         </DialogContent>
       </Dialog>
