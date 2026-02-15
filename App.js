@@ -14,7 +14,6 @@ import RegisterScreen from './src/screens/RegisterScreen';
 
 // Admin Screens
 import AdminDashboard from './src/screens/admin/AdminDashboard';
-import ReservationAcceptScreen from './src/screens/admin/ReservationAcceptScreen';
 import AdminAttendanceScreen from './src/screens/admin/AttendanceScreen';
 import ClassSchedulingScreen from './src/screens/admin/ClassSchedulingScreen';
 import UserReservationHistoryScreen from './src/screens/admin/UserReservationHistoryScreen';
@@ -42,7 +41,6 @@ function AdminStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ title: 'Admin Dashboard' }} />
-      <Stack.Screen name="ReservationAccept" component={ReservationAcceptScreen} options={{ title: 'Accept Reservations' }} />
       <Stack.Screen name="Attendance" component={AdminAttendanceScreen} options={{ title: 'Attendance' }} />
       <Stack.Screen name="ClassScheduling" component={ClassSchedulingScreen} options={{ title: 'Schedule Class' }} />
       <Stack.Screen name="UserReservationHistory" component={UserReservationHistoryScreen} options={{ title: 'User History' }} />

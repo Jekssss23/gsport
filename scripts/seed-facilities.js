@@ -21,7 +21,9 @@ const facilities = [
   {
     name: "Futsal",
     type: "Court",
-    pricePerHour: 150000,
+    morningPrice: 116000,
+    eveningPrice: 210000,
+    priceSplitHour: 18,
     dpPercentage: 50,
     courts: [
       { id: "futsal-1", name: "Futsal Court 1" },
@@ -31,7 +33,9 @@ const facilities = [
   {
     name: "Badminton",
     type: "Court",
-    pricePerHour: 80000,
+    morningPrice: 50000,
+    eveningPrice: 75000,
+    priceSplitHour: 15,
     dpPercentage: 50,
     courts: [
       { id: "badminton-1", name: "Badminton Court 1" }
@@ -40,7 +44,7 @@ const facilities = [
   {
     name: "Pickleball",
     type: "Court",
-    pricePerHour: 100000,
+    pricePerHour: 150000,
     dpPercentage: 50,
     courts: [
       { id: "pickleball-1", name: "Pickleball Court 1" },
@@ -69,9 +73,9 @@ async function seedFacilities() {
     
     console.log('🎉 Seeding completed successfully!');
     console.log('\nFacilities Summary:');
-    console.log('- Futsal: 2 courts, Rp 150,000/hour, 50% DP');
-    console.log('- Badminton: 1 court, Rp 80,000/hour, 50% DP');
-    console.log('- Pickleball: 2 courts, Rp 100,000/hour, 50% DP');
+    console.log('- Futsal: 2 courts, Morning (07-18): Rp 116,000/hour, Evening (19-23): Rp 210,000/hour, 50% DP');
+    console.log('- Badminton: 1 court, Morning (07-15): Rp 50,000/hour, Evening (16-23): Rp 75,000/hour, 50% DP');
+    console.log('- Pickleball: 2 courts, Rp 150,000/hour, 50% DP');
     console.log('\nTime slots: 7:00 AM - 11:00 PM (17 slots per day)');
     
     process.exit(0);
