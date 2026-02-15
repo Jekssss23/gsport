@@ -40,10 +40,13 @@ export interface Booking {
   dpAmount: number;
   remainingAmount: number;
   paymentProof: string; // URL to uploaded image
-  status: 'pending' | 'confirmed' | 'rejected' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'rejected' | 'cancelled' | 'cancellation_requested' | 'completed';
   createdAt: string;
   updatedAt: string;
   notes?: string;
+  cancellationRequested?: boolean;
+  cancellationReason?: string;
+  cancellationRequestedAt?: string;
 }
 
 export interface BookingSlot {

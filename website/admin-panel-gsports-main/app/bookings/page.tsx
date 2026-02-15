@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Search, Check, X, Clock, Eye, FileImage } from 'lucide-react';
+import { Loader2, Search, Check, X, Clock, Eye, FileImage, Archive, AlertCircle } from 'lucide-react';
 import { BookingService } from '@/lib/booking-service';
 import { Booking } from '@/lib/types';
 import Image from 'next/image';
@@ -76,8 +76,8 @@ export default function BookingsPage() {
     setActionLoading(bookingId);
     try {
       await BookingService.updateBookingStatus(bookingId, newStatus, notes);
-      setBookings(bookings.map(b => 
-        b.id === bookingId 
+      setBookings(bookings.map(b =>
+        b.id === bookingId
           ? { ...b, status: newStatus, notes, updatedAt: new Date().toISOString() }
           : b
       ));
@@ -85,6 +85,19 @@ export default function BookingsPage() {
       setNotes('');
     } catch (error) {
       console.error('Error updating booking:', error);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleArchive = async (bookingId: string) => {
+    setActionLoading(bookingId);
+    try {
+      await BookingService.archiveBooking(bookingId);
+      setBookings(bookings.filter(b => b.id !== bookingId));
+      setSelectedBooking(null);
+    } catch (error) {
+      console.error('Error archiving booking:', error);
     } finally {
       setActionLoading(null);
     }
@@ -100,6 +113,10 @@ export default function BookingsPage() {
         return <X className="w-4 h-4 text-red-400" />;
       case 'cancelled':
         return <X className="w-4 h-4 text-gray-400" />;
+      case 'cancellation_requested':
+        return <AlertCircle className="w-4 h-4 text-orange-400" />;
+      case 'completed':
+        return <Check className="w-4 h-4 text-blue-400" />;
       default:
         return null;
     }
@@ -115,6 +132,10 @@ export default function BookingsPage() {
         return 'bg-red-500/20 text-red-400 border border-red-500/30';
       case 'cancelled':
         return 'bg-gray-500/20 text-gray-400 border border-gray-500/30';
+      case 'cancellation_requested':
+        return 'bg-orange-500/20 text-orange-400 border border-orange-500/30';
+      case 'completed':
+        return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
       default:
         return '';
     }
@@ -156,6 +177,8 @@ export default function BookingsPage() {
                     <SelectItem value="all" className="text-white hover:bg-red-500/20">All Status</SelectItem>
                     <SelectItem value="pending" className="text-white hover:bg-red-500/20">Pending</SelectItem>
                     <SelectItem value="confirmed" className="text-white hover:bg-red-500/20">Confirmed</SelectItem>
+                    <SelectItem value="cancellation_requested" className="text-white hover:bg-red-500/20">Cancellation Requested</SelectItem>
+                    <SelectItem value="completed" className="text-white hover:bg-red-500/20">Completed</SelectItem>
                     <SelectItem value="rejected" className="text-white hover:bg-red-500/20">Rejected</SelectItem>
                     <SelectItem value="cancelled" className="text-white hover:bg-red-500/20">Cancelled</SelectItem>
                   </SelectContent>
@@ -261,7 +284,7 @@ export default function BookingsPage() {
                                           <p className="text-sm text-gray-400">DP: Rp {selectedBooking.dpAmount.toLocaleString()}</p>
                                         </div>
                                       </div>
-                                      
+
                                       {selectedBooking.paymentProof && (
                                         <div>
                                           <label className="text-sm text-gray-400">Payment Proof</label>
@@ -276,7 +299,7 @@ export default function BookingsPage() {
                                           </div>
                                         </div>
                                       )}
-                                      
+
                                       {selectedBooking.status === 'pending' && (
                                         <div className="space-y-4">
                                           <div>
@@ -320,7 +343,109 @@ export default function BookingsPage() {
                                           </div>
                                         </div>
                                       )}
-                                      
+
+                                      {selectedBooking.status === 'cancellation_requested' && (
+                                        <div className="space-y-4">
+                                          <div className="bg-orange-500/20 border border-orange-500/30 rounded-lg p-3">
+                                            <p className="text-orange-400 text-sm">
+                                              <strong>Cancellation Request:</strong> {selectedBooking.cancellationReason}
+                                            </p>
+                                            <p className="text-orange-400 text-xs mt-1">
+                                              Requested: {selectedBooking.cancellationRequestedAt ? new Date(selectedBooking.cancellationRequestedAt).toLocaleString() : '-'}
+                                            </p>
+                                          </div>
+                                          <div className="flex gap-2">
+                                            <Button
+                                              className="bg-green-600 hover:bg-green-700 text-white"
+                                              onClick={() => handleStatusUpdate(selectedBooking.id, 'confirmed')}
+                                              disabled={actionLoading === selectedBooking.id}
+                                            >
+                                              {actionLoading === selectedBooking.id ? (
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                              ) : (
+                                                <X className="w-4 h-4" />
+                                              )}
+                                              Reject Cancellation
+                                            </Button>
+                                            <Button
+                                              className="bg-red-600 hover:bg-red-700 text-white"
+                                              onClick={() => handleStatusUpdate(selectedBooking.id, 'cancelled')}
+                                              disabled={actionLoading === selectedBooking.id}
+                                            >
+                                              {actionLoading === selectedBooking.id ? (
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                              ) : (
+                                                <Check className="w-4 h-4" />
+                                              )}
+                                              Approve Cancellation
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {selectedBooking.status === 'confirmed' && (
+                                        <div className="flex gap-2">
+                                          <Button
+                                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                                            onClick={() => handleStatusUpdate(selectedBooking.id, 'completed')}
+                                            disabled={actionLoading === selectedBooking.id}
+                                          >
+                                            {actionLoading === selectedBooking.id ? (
+                                              <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                              <Check className="w-4 h-4" />
+                                            )}
+                                            Mark Completed
+                                          </Button>
+                                          <Button
+                                            className="bg-gray-600 hover:bg-gray-700 text-white"
+                                            onClick={() => handleArchive(selectedBooking.id)}
+                                            disabled={actionLoading === selectedBooking.id}
+                                          >
+                                            {actionLoading === selectedBooking.id ? (
+                                              <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                              <Archive className="w-4 h-4" />
+                                            )}
+                                            Archive
+                                          </Button>
+                                        </div>
+                                      )}
+
+                                      {selectedBooking.status === 'completed' && (
+                                        <div className="flex gap-2">
+                                          <Button
+                                            className="bg-gray-600 hover:bg-gray-700 text-white"
+                                            onClick={() => handleArchive(selectedBooking.id)}
+                                            disabled={actionLoading === selectedBooking.id}
+                                          >
+                                            {actionLoading === selectedBooking.id ? (
+                                              <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                              <Archive className="w-4 h-4" />
+                                            )}
+                                            Archive
+                                          </Button>
+                                        </div>
+                                      )}
+
+                                      {(selectedBooking.status === 'rejected' || selectedBooking.status === 'cancelled') && (
+                                        <div className="flex gap-2">
+                                          <Button
+                                            className="bg-gray-600 hover:bg-gray-700 text-white"
+                                            onClick={() => handleArchive(selectedBooking.id)}
+                                            disabled={actionLoading === selectedBooking.id}
+                                          >
+                                            {actionLoading === selectedBooking.id ? (
+                                              <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                              <Archive className="w-4 h-4" />
+                                            )}
+                                            Archive
+                                          </Button>
+                                        </div>
+                                      )}
+
                                       {selectedBooking.notes && (
                                         <div>
                                           <label className="text-sm text-gray-400">Notes</label>
