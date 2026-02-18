@@ -47,6 +47,10 @@ export interface Booking {
   cancellationRequested?: boolean;
   cancellationReason?: string;
   cancellationRequestedAt?: string;
+  staffOnDutyId?: string;
+  staffOnDutyName?: string;
+  staffOnDutyImageUrl?: string;
+  staffRating?: number; // 1-5 stars
 }
 
 export interface BookingSlot {
@@ -65,3 +69,41 @@ export interface BookingSlot {
 // - courts: Court[]
 // - bookings: Booking[]
 // - booking_slots: BookingSlot[]
+// - employees: Employee[]
+// - employee_schedules: EmployeeSchedule[]
+
+export interface Employee {
+  id: string;
+  name: string;
+  divisi: string;
+  imageUrl: string;
+  email?: string;
+  authUid?: string;
+  hasAccount?: boolean;
+  createdAt: any;
+  rollingConfig?: {
+    enabled: boolean;
+    startDate: string; // Reference Monday (YYYY-MM-DD)
+    weeks: {
+      shift: 'morning' | 'night' | 'middle';
+      startTime: string;
+      endTime: string;
+      outlet?: 'futsal' | 'swimming' | 'pickleball_badminton';
+      days: number[]; // 0-6 (Mon-Sun)
+    }[];
+  };
+}
+
+export interface EmployeeSchedule {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeeImageUrl: string;
+  divisi: string;
+  date: string; // YYYY-MM-DD
+  shift: 'morning' | 'middle' | 'night';
+  outlet?: 'swimming' | 'futsal' | 'pickleball_badminton'; // Only for Sports
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  createdAt: string;
+}

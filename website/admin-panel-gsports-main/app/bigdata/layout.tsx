@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { BarChart3, Eye, Users, ClipboardCheck, Archive, ListChecks, LogOut, Star } from 'lucide-react';
+import { BarChart3, Eye, Users, ClipboardCheck, Archive, ListChecks, LogOut, Star, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const bigDataMenuItems = [
@@ -11,6 +11,7 @@ const bigDataMenuItems = [
   { href: '/bigdata/kpi-penilaian', label: 'Rekap KPI', icon: ListChecks },
   { href: '/bigdata/monitoring', label: 'Monitoring', icon: Eye },
   { href: '/bigdata/karyawan', label: 'Manage Karyawan', icon: Users },
+  { href: '/bigdata/jadwal-karyawan', label: 'Jadwal Karyawan', icon: Clock },
   { href: '/bigdata/absen', label: 'Manage Absen', icon: ClipboardCheck },
   { href: '/bigdata/absen-arsip', label: 'Arsip Absen', icon: Archive },
   { href: '/bigdata/bookings-arsip', label: 'Arsip Booking', icon: Archive },
@@ -54,11 +55,10 @@ export default function BigDataLayout({ children }: { children: React.ReactNode 
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${
-                  isActive
-                    ? 'bg-red-500 text-white'
-                    : 'text-gray-400 hover:bg-red-500/20 hover:text-white'
-                }`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${isActive
+                  ? 'bg-red-500 text-white'
+                  : 'text-gray-400 hover:bg-red-500/20 hover:text-white'
+                  }`}
               >
                 <Icon size={20} />
                 <span>{item.label}</span>

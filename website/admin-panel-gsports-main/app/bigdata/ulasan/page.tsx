@@ -28,6 +28,10 @@ interface Review {
   bookingDate?: string;
   createdAt?: string;
   ratingType?: 'emote' | 'star';
+  staffOnDutyId?: string;
+  staffOnDutyName?: string;
+  staffRating?: number;
+  review?: string;
 }
 
 export default function BigDataUlasanPage() {
@@ -71,7 +75,7 @@ export default function BigDataUlasanPage() {
       const stars = '⭐'.repeat(rating) + '☆'.repeat(5 - rating);
       return stars;
     }
-    
+
     switch (rating) {
       case 'angry': return '😡';
       case 'neutral': return '😑';
@@ -93,7 +97,7 @@ export default function BigDataUlasanPage() {
         default: return `${rating} bintang`;
       }
     }
-    
+
     switch (rating) {
       case 'angry': return 'Sangat Buruk';
       case 'neutral': return 'Cukup Baik';
@@ -179,7 +183,8 @@ export default function BigDataUlasanPage() {
                   <th className="text-left py-3 px-4 font-semibold text-white">Nama User</th>
                   <th className="text-left py-3 px-4 font-semibold text-white">Fasilitas</th>
                   <th className="text-left py-3 px-4 font-semibold text-white">Tanggal Booking</th>
-                  <th className="text-left py-3 px-4 font-semibold text-white">Rating</th>
+                  <th className="text-left py-3 px-4 font-semibold text-white">Rating App</th>
+                  <th className="text-left py-3 px-4 font-semibold text-white">Petugas & Staff Rating</th>
                   <th className="text-left py-3 px-4 font-semibold text-white">Ulasan</th>
                   <th className="text-right py-3 px-4 font-semibold text-white">Aksi</th>
                 </tr>
@@ -205,9 +210,22 @@ export default function BigDataUlasanPage() {
                       </td>
                       <td className="py-4 px-4">
                         <div className="flex flex-col">
-                          <p className="text-2xl">{getRatingEmote(review.rating)}</p>
-                          <p className="text-xs text-gray-400">{getRatingText(review.rating)}</p>
+                          <p className="text-xl">{getRatingEmote(review.rating)}</p>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-tight">{getRatingText(review.rating)}</p>
                         </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        {review.staffOnDutyName ? (
+                          <div className="flex flex-col gap-1">
+                            <p className="text-sm font-medium text-white">{review.staffOnDutyName}</p>
+                            <div className="flex text-[#FFD700]">
+                              {'⭐'.repeat(review.staffRating || 0)}
+                              <span className="text-gray-600">{'⭐'.repeat(5 - (review.staffRating || 0))}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-500 italic">Tidak ada petugas terikat</p>
+                        )}
                       </td>
                       <td className="py-4 px-4">
                         <p className="text-sm text-gray-300">{review.feedback || review.review || '-'}</p>
