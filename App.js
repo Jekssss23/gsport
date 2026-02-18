@@ -17,6 +17,7 @@ import AdminDashboard from './src/screens/admin/AdminDashboard';
 import AdminAttendanceScreen from './src/screens/admin/AttendanceScreen';
 import ClassSchedulingScreen from './src/screens/admin/ClassSchedulingScreen';
 import UserReservationHistoryScreen from './src/screens/admin/UserReservationHistoryScreen';
+import RatingMeScreen from './src/screens/admin/RatingMeScreen';
 
 // User Screens
 import UserDashboard from './src/screens/user/UserDashboard';
@@ -44,6 +45,7 @@ function AdminStack() {
       <Stack.Screen name="Attendance" component={AdminAttendanceScreen} options={{ title: 'Attendance' }} />
       <Stack.Screen name="ClassScheduling" component={ClassSchedulingScreen} options={{ title: 'Schedule Class' }} />
       <Stack.Screen name="UserReservationHistory" component={UserReservationHistoryScreen} options={{ title: 'User History' }} />
+      <Stack.Screen name="RatingMe" component={RatingMeScreen} options={{ title: 'Rating Me' }} />
     </Stack.Navigator>
   );
 }
@@ -74,14 +76,14 @@ export default function App() {
           if (userDoc.exists()) {
             setRole(userDoc.data().role);
           } else {
-             // Fallback if doc doesn't exist yet (e.g. slight delay in registration)
-             // In a real app, you might want to listen to the document or retry.
-             // For now, we'll leave role null and let it try to re-render or just stay on loading?
-             // Actually, if we set loading false and role is null, it will go to AuthStack because logic below:
-             // user && role === 'admin' -> Admin
-             // user && role === 'user' -> User
-             // else -> Auth
-             // So if logged in but no role, it shows Auth (Login). This is safer than crashing.
+            // Fallback if doc doesn't exist yet (e.g. slight delay in registration)
+            // In a real app, you might want to listen to the document or retry.
+            // For now, we'll leave role null and let it try to re-render or just stay on loading?
+            // Actually, if we set loading false and role is null, it will go to AuthStack because logic below:
+            // user && role === 'admin' -> Admin
+            // user && role === 'user' -> User
+            // else -> Auth
+            // So if logged in but no role, it shows Auth (Login). This is safer than crashing.
           }
         } catch (error) {
           console.error("Error fetching user role:", error);

@@ -25,16 +25,16 @@ export default function MyReservationHistoryScreen() {
   }, [bookings]);
 
   const checkForCompletedBookings = () => {
-    const completedBookings = bookings.filter(booking => 
+    const completedBookings = bookings.filter(booking =>
       isBookingCompleted(booking) && !booking.hasRated && !booking.ratingShown
     );
-    
+
     if (completedBookings.length > 0) {
       // Show rating for the most recent completed booking
       const latestBooking = completedBookings[0];
       setSelectedBooking(latestBooking);
       setShowRatingModal(true);
-      
+
       // Mark as shown to prevent repeated popups
       markRatingAsShown(latestBooking.id);
     }
@@ -157,7 +157,7 @@ export default function MyReservationHistoryScreen() {
 
   return (
     <>
-      <ScrollView 
+      <ScrollView
         style={styles.container}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -206,6 +206,14 @@ export default function MyReservationHistoryScreen() {
                   <Text style={styles.value}>{booking.totalHours} jam</Text>
                 </View>
 
+                {booking.staffOnDutyName && (
+                  <View style={styles.staffRow}>
+                    <Ionicons name="person-circle" size={16} color={theme.colors.primary} />
+                    <Text style={styles.staffLabel}>Petugas: </Text>
+                    <Text style={styles.staffValue}>{booking.staffOnDutyName}</Text>
+                  </View>
+                )}
+
                 <View style={styles.divider} />
 
                 <View style={styles.infoRow}>
@@ -231,7 +239,7 @@ export default function MyReservationHistoryScreen() {
                 )}
 
                 {canCancelBooking(booking) && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.cancelButton}
                     onPress={() => handleCancellationPress(booking)}
                   >
@@ -241,7 +249,7 @@ export default function MyReservationHistoryScreen() {
                 )}
 
                 {canRateBooking(booking) && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.rateButton}
                     onPress={() => handleRatingPress(booking)}
                   >
@@ -380,6 +388,24 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
     textAlign: 'right',
+  },
+  staffRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 8,
+  },
+  staffLabel: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginLeft: 6,
+  },
+  staffValue: {
+    fontSize: 12,
+    color: theme.colors.text,
+    fontWeight: 'bold',
   },
   valuePrice: {
     fontSize: 14,

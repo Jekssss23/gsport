@@ -34,8 +34,8 @@ export default function AdminDashboard({ navigation }) {
       "Apakah Anda yakin ingin keluar?",
       [
         { text: "Batal", style: "cancel" },
-        { 
-          text: "Keluar", 
+        {
+          text: "Keluar",
           onPress: () => signOut(auth).catch(error => console.error('Error signing out: ', error)),
           style: 'destructive'
         }
@@ -44,7 +44,7 @@ export default function AdminDashboard({ navigation }) {
   };
 
   const AdminCard = ({ title, icon, route, gradientColors, description }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.cardContainer}
       onPress={() => navigation.navigate(route)}
       activeOpacity={0.9}
@@ -81,37 +81,22 @@ export default function AdminDashboard({ navigation }) {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>Manajemen Dashboard</Text>
-        
-        <AdminCard 
-          title="Absensi" 
+
+        <AdminCard
+          title="Absensi"
           description="Catat kehadiran member"
-          icon="finger-print" 
+          icon="finger-print"
           route="Attendance"
-          gradientColors={['#333333', '#000000']} 
+          gradientColors={['#333333', '#000000']}
         />
 
-        <View style={styles.statsCard}>
-          <LinearGradient
-            colors={['rgba(255,0,0,0.1)', 'rgba(0,0,0,0.3)']}
-            style={styles.statsContent}
-          >
-            <Text style={styles.statsTitle}>Statistik Absensi</Text>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>12</Text>
-                <Text style={styles.statLabel}>Hari Ini</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>45</Text>
-                <Text style={styles.statLabel}>Minggu Ini</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>156</Text>
-                <Text style={styles.statLabel}>Total</Text>
-              </View>
-            </View>
-          </LinearGradient>
-        </View>
+        <AdminCard
+          title="Rating Me"
+          description="Lihat penilaian performa Anda"
+          icon="star"
+          route="RatingMe"
+          gradientColors={['#B22222', '#8B0000']}
+        />
       </ScrollView>
     </View>
   );

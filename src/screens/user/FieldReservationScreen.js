@@ -19,7 +19,7 @@ import { theme } from '../../styles/theme';
 
 const FieldReservationScreen = ({ navigation, route }) => {
   const { user } = route.params || {};
-  
+
   const [facilities, setFacilities] = useState([]);
   const [selectedFacility, setSelectedFacility] = useState(null);
   const [selectedCourt, setSelectedCourt] = useState(null);
@@ -30,6 +30,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(false);
   const [loadingFacilities, setLoadingFacilities] = useState(true);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [staffMap, setStaffMap] = useState({}); // Mapping hour -> staff object
   const [step, setStep] = useState(1); // 1: Facility, 2: Court & Time, 3: Payment
 
   useEffect(() => {
@@ -71,18 +72,30 @@ const FieldReservationScreen = ({ navigation, route }) => {
       setLoadingSlots(true);
       // Get all slots (7-23)
       const allSlots = Array.from({ length: 17 }, (_, i) => i + 7);
-      
+
       // Get booked slots
       const availableSlots = await BookingService.getAvailableSlots(selectedCourt.id, selectedDate);
-      
+
       // Create slot objects with availability status
       const slotsWithStatus = allSlots.map(hour => ({
         hour,
         isAvailable: availableSlots.includes(hour)
       }));
-      
+
       setAvailableSlots(slotsWithStatus);
       setSelectedSlots([]); // Reset selected slots when loading new availability
+      setStaffMap({}); // Reset staff map
+
+      // Pre-load staff for available slots
+      const newStaffMap = {};
+      for (const slot of availableSlots) {
+        const staff = await BookingService.getStaffBySlot(selectedDate, slot, selectedFacility.name);
+        if (staff) {
+          newStaffMap[slot] = staff;
+        }
+      }
+      setStaffMap(newStaffMap);
+
     } catch (error) {
       console.error('Error loading slots:', error);
       Alert.alert('Error', 'Failed to load available slots');
@@ -108,7 +121,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
   const toggleTimeSlot = (slotObj) => {
     // Don't allow selecting unavailable slots
     if (!slotObj.isAvailable) return;
-    
+
     const hour = slotObj.hour;
     setSelectedSlots(prev => {
       if (prev.includes(hour)) {
@@ -147,10 +160,10 @@ const FieldReservationScreen = ({ navigation, route }) => {
 
   const calculateTotal = () => {
     if (!selectedFacility || selectedSlots.length === 0) return { total: 0, dp: 0 };
-    
+
     const total = selectedFacility.pricePerHour * selectedSlots.length;
     const dp = Math.round(total * (selectedFacility.dpPercentage / 100));
-    
+
     return { total, dp, remaining: total - dp };
   };
 
@@ -170,7 +183,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
       // Check if slots are still available before uploading
       const currentAvailableSlots = await BookingService.getAvailableSlots(selectedCourt.id, selectedDate);
       const allSlotsStillAvailable = selectedSlots.every(slot => currentAvailableSlots.includes(slot));
-      
+
       if (!allSlotsStillAvailable) {
         Alert.alert('Error', 'Some time slots are no longer available. Please select different slots.');
         setLoading(false);
@@ -180,7 +193,11 @@ const FieldReservationScreen = ({ navigation, route }) => {
 
       const paymentProofUrl = await uploadPaymentProof();
       const { total, dp, remaining } = calculateTotal();
-      
+
+      // Ambil staff dari slot pertama yang dipilih (asumsi staff sama jika slot berurutan)
+      const firstSlot = selectedSlots[0];
+      const assignedStaff = staffMap[firstSlot];
+
       const bookingData = {
         userId: user.uid || user.email,
         userName: user.displayName || user.email,
@@ -197,20 +214,23 @@ const FieldReservationScreen = ({ navigation, route }) => {
         dpAmount: dp,
         remainingAmount: remaining,
         paymentProof: paymentProofUrl,
-        status: 'pending'
+        status: 'pending',
+        staffOnDutyId: assignedStaff?.employeeId || null,
+        staffOnDutyName: assignedStaff?.employeeName || 'No staff assigned',
+        staffOnDutyImageUrl: assignedStaff?.employeeImageUrl || ''
       };
 
       await BookingService.createBooking(bookingData);
-      
+
       Alert.alert(
-        'Success!', 
+        'Success!',
         'Your booking has been submitted and is pending approval. Check your reservation history for updates.',
-        [{ 
-          text: 'View History', 
+        [{
+          text: 'View History',
           onPress: () => navigation.navigate('MyReservationHistory')
         },
-        { 
-          text: 'OK', 
+        {
+          text: 'OK',
           onPress: () => navigation.goBack()
         }]
       );
@@ -230,7 +250,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
       ) : facilities.length === 0 ? (
         <View>
           <Text style={styles.emptyText}>No facilities available</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.retryButton}
             onPress={loadFacilities}
           >
@@ -257,7 +277,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>{selectedFacility.name}</Text>
       <Text style={styles.subtitle}>Select Court & Time Slots</Text>
-      
+
       {/* Court Selection */}
       <Text style={styles.sectionLabel}>Choose Court:</Text>
       <View style={styles.courtGrid}>
@@ -290,7 +310,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
 
           {/* Time Slots */}
           <Text style={styles.sectionLabel}>Available Time Slots:</Text>
-          
+
           {/* Legend */}
           <View style={styles.legendContainer}>
             <View style={styles.legendItem}>
@@ -306,7 +326,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
               <Text style={styles.legendText}>Booked</Text>
             </View>
           </View>
-          
+
           {loadingSlots ? (
             <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 20 }} />
           ) : availableSlots.length === 0 ? (
@@ -347,11 +367,14 @@ const FieldReservationScreen = ({ navigation, route }) => {
               <Text style={styles.summaryText}>Court: {selectedCourt.name}</Text>
               <Text style={styles.summaryText}>Date: {selectedDate}</Text>
               <Text style={styles.summaryText}>Time: {selectedSlots.sort((a, b) => a - b).map(h => `${h}:00`).join(', ')}</Text>
+              <Text style={styles.summaryStaffText}>
+                Staff Jaga: {selectedSlots.map(h => staffMap[h]?.employeeName || 'Pending').filter((v, i, a) => a.indexOf(v) === i).join(', ')}
+              </Text>
               <Text style={styles.summaryText}>Duration: {selectedSlots.length} hour(s)</Text>
               <View style={styles.divider} />
               <Text style={styles.summaryText}>Total: Rp {calculateTotal().total.toLocaleString()}</Text>
               <Text style={styles.summaryTextHighlight}>DP Required: Rp {calculateTotal().dp.toLocaleString()}</Text>
-              
+
               <TouchableOpacity
                 style={styles.continueButton}
                 onPress={() => setStep(3)}
@@ -368,31 +391,31 @@ const FieldReservationScreen = ({ navigation, route }) => {
   const renderPayment = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Payment</Text>
-      
+
       <View style={styles.paymentCard}>
         <Text style={styles.paymentTitle}>Down Payment Required</Text>
         <Text style={styles.paymentAmount}>Rp {calculateTotal().dp.toLocaleString()}</Text>
-        
+
         <View style={styles.qrisContainer}>
           <Text style={styles.qrisTitle}>Scan QRIS Code</Text>
-          <Image 
+          <Image
             source={require('../../../assets/images/qris.jpg')}
             style={styles.qrisImage}
             resizeMode="contain"
           />
         </View>
-        
+
         <Text style={styles.uploadTitle}>Upload Payment Proof</Text>
         <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
           <Text style={styles.uploadButtonText}>
             {paymentProof ? 'Change Image' : 'Select Image'}
           </Text>
         </TouchableOpacity>
-        
+
         {paymentProof && (
           <Image source={{ uri: paymentProof.uri }} style={styles.proofImage} />
         )}
-        
+
         <TouchableOpacity
           style={[styles.submitButton, (!paymentProof || loading) && styles.disabledButton]}
           onPress={submitBooking}
@@ -419,7 +442,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
           {step === 1 && renderFacilitySelection()}
           {step === 2 && renderCourtAndTimeSelection()}
           {step === 3 && renderPayment()}
-          
+
           {step > 1 && (
             <TouchableOpacity
               style={styles.backButton}
@@ -640,6 +663,12 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontWeight: 'bold',
     marginTop: 4,
+  },
+  summaryStaffText: {
+    fontSize: 14,
+    color: '#FFD700', // Gold color for staff info
+    fontWeight: 'bold',
+    marginVertical: 4,
   },
   divider: {
     height: 1,

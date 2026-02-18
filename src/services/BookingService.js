@@ -99,6 +99,127 @@ export class BookingService {
     }
   }
 
+  // Get employees on duty for a specific date
+  static async getEmployeesOnDuty(date) {
+    try {
+      const schedulesRef = collection(db, 'employee_schedules');
+      const q = query(
+        schedulesRef,
+        where('date', '==', date)
+      );
+
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+    } catch (error) {
+      console.error('Error fetching employees on duty:', error);
+      throw error;
+    }
+  }
+
+  // Get specific staff by date, hour and facility (Sports)
+  static async getStaffBySlot(date, hour, facilityName) {
+    try {
+      // 1. Check for manual schedule first (Override)
+      const manualSchedules = await this.getEmployeesOnDuty(date);
+      const manualStaff = manualSchedules.find(s => {
+        const startHour = parseInt(s.startTime.split(':')[0]);
+        const endHour = parseInt(s.endTime.split(':')[0]);
+        const isTimeMatch = hour >= startHour && hour < endHour;
+
+        let outletMatch = true;
+        if (s.divisi === 'Sports') {
+          const lowerFacility = facilityName.toLowerCase();
+          if (lowerFacility.includes('futsal')) outletMatch = s.outlet === 'futsal';
+          else if (lowerFacility.includes('swimming') || lowerFacility.includes('renang')) outletMatch = s.outlet === 'swimming';
+          else if (lowerFacility.includes('badminton') || lowerFacility.includes('pickleball')) outletMatch = s.outlet === 'pickleball_badminton';
+        }
+        return isTimeMatch && outletMatch;
+      });
+
+      if (manualStaff) return manualStaff;
+
+      // 2. If no manual schedule, check Rolling Patterns
+      const employeesRef = collection(db, 'employees');
+      const empSnapshot = await getDocs(employeesRef);
+      const employees = empSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      const targetDate = new Date(date);
+      const dayOfWeek = targetDate.getDay() === 0 ? 6 : targetDate.getDay() - 1; // 0: Mon, ..., 6: Sun
+
+      for (const emp of employees) {
+        if (emp.rollingConfig && emp.rollingConfig.enabled) {
+          const startDate = new Date(emp.rollingConfig.startDate);
+
+          // Calculate weeks passed since startDate
+          const diffTime = targetDate.getTime() - startDate.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+          const weeksPassed = Math.floor(diffDays / 7);
+
+          if (weeksPassed < 0) continue; // Pattern hasn't started yet
+
+          const weekIndex = weeksPassed % emp.rollingConfig.weeks.length;
+          const config = emp.rollingConfig.weeks[weekIndex];
+
+          if (config.days.includes(dayOfWeek)) {
+            const startHour = parseInt(config.startTime.split(':')[0]);
+            const endHour = parseInt(config.endTime.split(':')[0]);
+            const isTimeMatch = hour >= startHour && hour < endHour;
+
+            let outletMatch = true;
+            if (emp.divisi === 'Sports') {
+              const lowerFacility = facilityName.toLowerCase();
+              if (lowerFacility.includes('futsal')) outletMatch = config.outlet === 'futsal';
+              else if (lowerFacility.includes('swimming') || lowerFacility.includes('renang')) outletMatch = config.outlet === 'swimming';
+              else if (lowerFacility.includes('badminton') || lowerFacility.includes('pickleball')) outletMatch = config.outlet === 'pickleball_badminton';
+            }
+
+            if (isTimeMatch && outletMatch) {
+              return {
+                employeeId: emp.id,
+                employeeName: emp.name,
+                employeeImageUrl: emp.imageUrl,
+                divisi: emp.divisi,
+                // Add indicator that this is from rolling
+                isRolling: true
+              };
+            }
+          }
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error getting staff by slot:', error);
+      return null;
+    }
+  }
+
+  // Get ratings for a specific employee
+  static async getEmployeeRatings(employeeId) {
+    try {
+      const reviewsRef = collection(db, 'reviews');
+      const q = query(
+        reviewsRef,
+        where('staffOnDutyId', '==', employeeId),
+        orderBy('createdAt', 'desc')
+      );
+
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+    } catch (error) {
+      console.error('Error fetching employee ratings:', error);
+      // Fallback: If no index yet or field doesn't exist in early docs, 
+      // try a simpler query or handle error gracefully
+      return [];
+    }
+  }
+
   // Create new booking with all required data
   static async createBooking(bookingData) {
     try {

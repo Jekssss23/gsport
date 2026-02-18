@@ -51,6 +51,13 @@ service cloud.firestore {
       allow write: if request.auth != null && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
+
+    // Employee Schedules collection rules
+    match /employee_schedules/{scheduleId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
     
     // Settings collection rules
     match /settings/{settingsId} {
@@ -94,8 +101,9 @@ service cloud.firestore {
 
     // Reviews collection
     match /reviews/{reviewId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read, create: if request.auth != null;
+      allow update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
     // Default deny all other access

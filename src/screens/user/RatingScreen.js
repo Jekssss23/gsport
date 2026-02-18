@@ -15,13 +15,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import { BookingService } from '../../services/BookingService';
 
-const RatingScreen = ({ 
-  visible, 
-  booking, 
-  onClose, 
-  onSubmit 
+const RatingScreen = ({
+  visible,
+  booking,
+  onClose,
+  onSubmit
 }) => {
   const [rating, setRating] = useState('');
+  const [staffRating, setStaffRating] = useState(0); // Star rating 1-5
   const [review, setReview] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -51,10 +52,13 @@ const RatingScreen = ({
         facilityId: booking.courtId,
         facilityName: booking.facilityName,
         rating,
+        staffRating,
+        staffOnDutyId: booking.staffOnDutyId || null,
+        staffOnDutyName: booking.staffOnDutyName || null,
         review: review.trim(),
         userName: booking.userName,
         bookingDate: booking.date,
-        ratingType: 'emote'
+        ratingType: 'emote_with_staff_star'
       };
 
       await BookingService.addReview(reviewData);
@@ -123,6 +127,31 @@ const RatingScreen = ({
               {rating && emoteOptions.find(opt => opt.value === rating)?.label}
             </Text>
           </View>
+
+          {booking?.staffOnDutyName && (
+            <View style={styles.staffRatingSection}>
+              <Text style={styles.sectionTitle}>Beri Rating untuk Petugas Jaga</Text>
+              <Text style={styles.staffNameText}>{booking.staffOnDutyName}</Text>
+              <View style={styles.starContainer}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <TouchableOpacity
+                    key={star}
+                    onPress={() => setStaffRating(star)}
+                    style={styles.starButton}
+                  >
+                    <Ionicons
+                      name={star <= staffRating ? "star" : "star-outline"}
+                      size={40}
+                      color={star <= staffRating ? "#FFD700" : "#999"}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.ratingLabel}>
+                {staffRating > 0 ? `${staffRating} dari 5 Bintang` : 'Pilih bintang'}
+              </Text>
+            </View>
+          )}
 
           <View style={styles.reviewSection}>
             <Text style={styles.sectionTitle}>Tulis Ulasan (Opsional)</Text>
@@ -246,6 +275,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.textSecondary,
     textAlign: 'center',
+    marginTop: 8,
+  },
+  staffRatingSection: {
+    alignItems: 'center',
+    marginBottom: 32,
+    padding: 16,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+  },
+  staffNameText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.colors.primary,
+    marginBottom: 12,
+  },
+  starContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  starButton: {
+    padding: 4,
   },
   reviewSection: {
     marginBottom: 32,
