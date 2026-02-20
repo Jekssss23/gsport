@@ -70,7 +70,9 @@ export default function AttendanceScreen({ navigation }) {
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({});
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+      });
       setCurrentLocation({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
@@ -124,7 +126,7 @@ export default function AttendanceScreen({ navigation }) {
       const now = new Date();
       const time = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
       const date = now.toISOString().split('T')[0];
-      
+
       // Determine status based on time (assuming work starts at 08:00)
       const hour = now.getHours();
       const minute = now.getMinutes();
@@ -165,7 +167,7 @@ export default function AttendanceScreen({ navigation }) {
         where('date', '==', today)
       );
       const querySnapshot = await getDocs(q);
-      
+
       if (!querySnapshot.empty) {
         const docRef = querySnapshot.docs[0].ref;
         await updateDoc(docRef, {
@@ -195,11 +197,11 @@ export default function AttendanceScreen({ navigation }) {
 
   const distance = currentLocation && attendanceSettings
     ? calculateDistance(
-        currentLocation.latitude,
-        currentLocation.longitude,
-        attendanceSettings.latitude,
-        attendanceSettings.longitude
-      )
+      currentLocation.latitude,
+      currentLocation.longitude,
+      attendanceSettings.latitude,
+      attendanceSettings.longitude
+    )
     : null;
 
   const isInRange = distance && distance <= attendanceSettings?.radius;
@@ -221,10 +223,10 @@ export default function AttendanceScreen({ navigation }) {
             colors={isInRange ? ['#10b981', '#059669'] : ['#ef4444', '#dc2626']}
             style={styles.statusGradient}
           >
-            <Ionicons 
-              name={isInRange ? 'checkmark-circle' : 'close-circle'} 
-              size={48} 
-              color="white" 
+            <Ionicons
+              name={isInRange ? 'checkmark-circle' : 'close-circle'}
+              size={48}
+              color="white"
             />
             <Text style={styles.statusTitle}>
               {isInRange ? 'In Range' : 'Out of Range'}

@@ -18,7 +18,7 @@ export default function AttendanceScreen() {
   const [distance, setDistance] = useState(null);
   const [isWithinRadius, setIsWithinRadius] = useState(false);
   const [loading, setLoading] = useState(true);
-  
+
   // Animation values
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -53,7 +53,7 @@ export default function AttendanceScreen() {
     const checkLocationPermissions = async () => {
       try {
         let { status } = await Location.requestForegroundPermissionsAsync();
-        
+
         if (status !== 'granted') {
           setLocationStatus('denied');
           Alert.alert(
@@ -65,19 +65,19 @@ export default function AttendanceScreen() {
         }
 
         setLocationStatus('granted');
-        
+
         // Get current location
         const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
+          accuracy: Location.Accuracy.BestForNavigation,
         });
-        
+
         setCurrentLocation({
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         });
-        
+
         console.log('Current location:', location.coords);
-        
+
       } catch (error) {
         console.error('Error getting location:', error);
         setLocationStatus('error');
@@ -97,10 +97,10 @@ export default function AttendanceScreen() {
         attendanceSettings.latitude,
         attendanceSettings.longitude
       );
-      
+
       setDistance(calculatedDistance);
       setIsWithinRadius(calculatedDistance <= attendanceSettings.radius);
-      
+
       console.log('Distance:', calculatedDistance, 'meters');
       console.log('Within radius:', calculatedDistance <= attendanceSettings.radius);
     }
@@ -114,10 +114,10 @@ export default function AttendanceScreen() {
     const Δφ = (lat2 - lat1) * Math.PI / 180;
     const Δλ = (lon2 - lon1) * Math.PI / 180;
 
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) *
+      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
     return R * c; // Distance in meters
   };
@@ -223,9 +223,9 @@ export default function AttendanceScreen() {
         status: 'hadir',
         location: currentLocation
           ? {
-              latitude: currentLocation.latitude,
-              longitude: currentLocation.longitude,
-            }
+            latitude: currentLocation.latitude,
+            longitude: currentLocation.longitude,
+          }
           : null,
         distanceMeters: typeof distance === 'number' ? distance : null,
         radiusMeters: attendanceSettings?.radius ?? null,
@@ -252,14 +252,14 @@ export default function AttendanceScreen() {
     setLoading(true);
     try {
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+        accuracy: Location.Accuracy.BestForNavigation,
       });
-      
+
       setCurrentLocation({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
-      
+
       Alert.alert('Success', 'Lokasi berhasil diperbarui!');
     } catch (error) {
       Alert.alert('Error', 'Gagal memperbarui lokasi');
@@ -295,7 +295,7 @@ export default function AttendanceScreen() {
         {/* Location Status Card */}
         <View style={styles.locationCard}>
           <Text style={styles.locationTitle}>Status Lokasi</Text>
-          
+
           {locationStatus === 'granted' && currentLocation && attendanceSettings ? (
             <View style={styles.locationInfo}>
               <View style={styles.locationRow}>
@@ -304,15 +304,15 @@ export default function AttendanceScreen() {
                   {isWithinRadius ? "ANDA DALAM RADIUS" : "ANDA DI LUAR RADIUS"}
                 </Text>
               </View>
-              
+
               <Text style={styles.distanceText}>
                 Jarak: {Math.round(distance)}m / {attendanceSettings.radius}m
               </Text>
-              
+
               <Text style={styles.coordsText}>
                 Lokasi: {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
               </Text>
-              
+
               <Text style={styles.targetText}>
                 Target: {attendanceSettings.locationName}
               </Text>
@@ -321,13 +321,13 @@ export default function AttendanceScreen() {
             <View style={styles.locationInfo}>
               <Ionicons name="warning" size={20} color="#FFA500" />
               <Text style={styles.warningText}>
-                {locationStatus === 'denied' ? 'Izin lokasi ditolak' : 
-                 locationStatus === 'error' ? 'Gagal mendapatkan lokasi' : 
-                 'Memeriksa lokasi...'}
+                {locationStatus === 'denied' ? 'Izin lokasi ditolak' :
+                  locationStatus === 'error' ? 'Gagal mendapatkan lokasi' :
+                    'Memeriksa lokasi...'}
               </Text>
             </View>
           )}
-          
+
           <TouchableOpacity style={styles.refreshButton} onPress={refreshLocation}>
             <Ionicons name="refresh" size={16} color={theme.colors.primary} />
             <Text style={styles.refreshText}>Refresh Lokasi</Text>
@@ -341,15 +341,15 @@ export default function AttendanceScreen() {
 
         <View style={styles.buttonContainer}>
           <Text style={styles.instruction}>
-            {isAttended ? 'Absensi Berhasil Dicatat!' : 
-             !isWithinRadius ? 'Dekat ke lokasi absensi terlebih dahulu!' :
-             'Tekan Tombol Untuk Absen'}
+            {isAttended ? 'Absensi Berhasil Dicatat!' :
+              !isWithinRadius ? 'Dekat ke lokasi absensi terlebih dahulu!' :
+                'Tekan Tombol Untuk Absen'}
           </Text>
 
-          <Animated.View 
+          <Animated.View
             style={[
               styles.buttonWrapper,
-              { 
+              {
                 transform: [
                   { scale: isAttended ? scaleAnim : (isWithinRadius ? Animated.multiply(scaleAnim, pulseAnim) : scaleAnim) },
                   { rotate: rotation }
@@ -357,29 +357,29 @@ export default function AttendanceScreen() {
               }
             ]}
           >
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={handleAttendance}
               disabled={isAttended || !isWithinRadius}
               activeOpacity={0.8}
             >
               <LinearGradient
                 colors={
-                  isAttended ? ['#00FF00', '#00AA00'] : 
-                  !isWithinRadius ? ['#666666', '#444444'] :
-                  ['#FF0000', '#CC0000']
+                  isAttended ? ['#00FF00', '#00AA00'] :
+                    !isWithinRadius ? ['#666666', '#444444'] :
+                      ['#FF0000', '#CC0000']
                 }
                 style={styles.attendanceButton}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
-                <Ionicons 
+                <Ionicons
                   name={
-                    isAttended ? "checkmark-circle" : 
-                    !isWithinRadius ? "close-circle" :
-                    "finger-print"
-                  } 
-                  size={80} 
-                  color="white" 
+                    isAttended ? "checkmark-circle" :
+                      !isWithinRadius ? "close-circle" :
+                        "finger-print"
+                  }
+                  size={80}
+                  color="white"
                 />
               </LinearGradient>
             </TouchableOpacity>
