@@ -1,27 +1,47 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, ImageBackground } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Dimensions, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../config/firebase.js';
 import { theme } from '../styles/theme.js';
-import LottieView from 'lottie-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+
+const { width } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isEmailFocused, setIsEmailFocused] = useState(false);
-  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
+      Alert.alert('Error', 'Please enter your Email or Phone Number and Password');
       return;
     }
 
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      let finalEmail = email.trim();
+      
+      // If the input doesn't look like an email, assume it's a phone number
+      if (!finalEmail.includes('@')) {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('phoneNumber', '==', finalEmail));
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          finalEmail = querySnapshot.docs[0].data().email;
+        } else {
+          Alert.alert('Error', 'No account found with this phone number.');
+          setLoading(false);
+          return;
+        }
+      }
+
+      const userCredential = await signInWithEmailAndPassword(auth, finalEmail, password);
       const user = userCredential.user;
 
       const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -44,59 +64,93 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <StatusBar style="light" />
+      <LinearGradient
+        colors={[theme.colors.background, '#000000']}
+        style={StyleSheet.absoluteFill}
+      />
       
-      <View style={styles.loginBox}>
-        <Text style={styles.title}>Login</Text>
-        
-        <View style={styles.userBox}>
-          <TextInput
-            style={[styles.input, (isEmailFocused || email) && styles.inputFocused]}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            onFocus={() => setIsEmailFocused(true)}
-            onBlur={() => setIsEmailFocused(false)}
-            placeholderTextColor="transparent"
-          />
-          <Text style={[styles.label, (isEmailFocused || email) && styles.labelFocused]}>Email</Text>
-        </View>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.header}>
+            <View style={styles.logoCircle}>
+              <Text style={styles.logoText}>GSC</Text>
+            </View>
+            <Text style={styles.welcomeTitle}>Welcome Back</Text>
+            <Text style={styles.welcomeSubtitle}>Sign in to continue your journey</Text>
+          </View>
 
-        <View style={styles.userBox}>
-          <TextInput
-            style={[styles.input, (isPasswordFocused || password) && styles.inputFocused]}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            onFocus={() => setIsPasswordFocused(true)}
-            onBlur={() => setIsPasswordFocused(false)}
-            placeholderTextColor="transparent"
-          />
-          <Text style={[styles.label, (isPasswordFocused || password) && styles.labelFocused]}>Password</Text>
-        </View>
+          <View style={styles.formContainer}>
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Email or Phone Number</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="person-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  placeholder="Enter email or phone"
+                  placeholderTextColor={theme.colors.textTertiary}
+                />
+              </View>
+            </View>
 
-        {loading ? (
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        ) : (
-          <TouchableOpacity onPress={handleLogin} style={styles.buttonContainer}>
-             <View style={styles.button}>
-                {/* Simulated CSS animations with simple borders for now */}
-                <View style={[styles.borderSpan, styles.borderTop]} />
-                <View style={[styles.borderSpan, styles.borderRight]} />
-                <View style={[styles.borderSpan, styles.borderBottom]} />
-                <View style={[styles.borderSpan, styles.borderLeft]} />
-                <Text style={styles.buttonText}>Submit</Text>
-             </View>
-          </TouchableOpacity>
-        )}
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Password</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  placeholder="Enter your password"
+                  placeholderTextColor={theme.colors.textTertiary}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons 
+                    name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                    size={20} 
+                    color={theme.colors.textSecondary} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
 
-        <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-                <Text style={styles.link}>Sign up!</Text>
+            <TouchableOpacity style={styles.forgotPassword}>
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>
-        </View>
-      </View>
+
+            {loading ? (
+              <ActivityIndicator size="large" color={theme.colors.primary} style={styles.loader} />
+            ) : (
+              <TouchableOpacity onPress={handleLogin} activeOpacity={0.8} style={styles.loginButton}>
+                <LinearGradient
+                  colors={theme.gradients.primary}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.gradientButton}
+                >
+                  <Text style={styles.loginButtonText}>LOGIN</Text>
+                  <Ionicons name="arrow-forward" size={20} color="white" />
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>New to GSC? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                <Text style={styles.signUpText}>Create Account</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -104,129 +158,119 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 30,
+    paddingTop: 80,
+    paddingBottom: 40,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 50,
+  },
+  logoCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.background, // #1a1a1a
+    marginBottom: 20,
+    ...theme.shadows.medium,
   },
-  lottieContainer: {
-    width: 150,
-    height: 150,
+  logoText: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  welcomeSubtitle: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+  },
+  formContainer: {
+    width: '100%',
+  },
+  inputWrapper: {
     marginBottom: 20,
   },
-  lottie: {
-    width: '100%',
-    height: '100%',
-  },
-  loginBox: {
-    width: 300,
-    padding: 40,
-    backgroundColor: theme.colors.cardBackground, // rgba(0,0,0,.9)
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 15 },
-    shadowOpacity: 0.6,
-    shadowRadius: 25,
-    elevation: 10,
-  },
-  title: {
-    margin: 0,
-    padding: 0,
-    color: theme.colors.text,
-    textAlign: 'center',
-    fontSize: 24,
-    fontWeight: 'bold',
+  inputLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginLeft: 4,
+    textTransform: 'uppercase',
     letterSpacing: 1,
-    marginBottom: 30,
   },
-  userBox: {
-    position: 'relative',
-    marginBottom: 30,
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.medium,
+    paddingHorizontal: 15,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+    height: 55,
+  },
+  inputIcon: {
+    marginRight: 12,
   },
   input: {
-    width: '100%',
-    paddingVertical: 10,
-    fontSize: 16,
+    flex: 1,
     color: theme.colors.text,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.inputBorder,
-    backgroundColor: 'transparent',
-  },
-  inputFocused: {
-    // Input styles when focused if needed
-  },
-  label: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    paddingVertical: 10,
     fontSize: 16,
-    color: theme.colors.text,
-    pointerEvents: 'none', // Not supported in RN, but logic handled by state
   },
-  labelFocused: {
-    top: -20,
-    left: 0,
-    color: theme.colors.primary, // Red or Theme Color
-    fontSize: 12,
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginBottom: 30,
   },
-  buttonContainer: {
-    marginTop: 40,
+  forgotPasswordText: {
+    color: theme.colors.primary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  loginButton: {
+    borderRadius: theme.borderRadius.medium,
+    overflow: 'hidden',
+    ...theme.shadows.medium,
+  },
+  gradientButton: {
+    height: 55,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  button: {
-    position: 'relative',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    overflow: 'hidden',
-  },
-  buttonText: {
-    color: theme.colors.buttonText,
+  loginButtonText: {
+    color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 3,
+    letterSpacing: 2,
+    marginRight: 10,
   },
-  // Simple borders to mimic the span animations statically for now
-  borderSpan: {
-    position: 'absolute',
-    backgroundColor: theme.colors.primary, 
-  },
-  borderTop: {
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: 2,
-  },
-  borderRight: {
-    top: 0,
-    right: 0,
-    width: 2,
-    height: '100%',
-  },
-  borderBottom: {
-    bottom: 0,
-    right: 0,
-    width: '100%',
-    height: 2,
-  },
-  borderLeft: {
-    bottom: 0,
-    left: 0,
-    width: 2,
-    height: '100%',
+  loader: {
+    marginVertical: 10,
   },
   footer: {
-      flexDirection: 'row',
-      marginTop: 20,
-      justifyContent: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 40,
   },
   footerText: {
-      color: '#aaa',
-      fontSize: 14,
+    color: theme.colors.textSecondary,
+    fontSize: 14,
   },
-  link: {
-      color: theme.colors.text,
-      fontSize: 14,
-      textDecorationLine: 'none', // 'none' is default but explicit
+  signUpText: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });

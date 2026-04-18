@@ -32,7 +32,7 @@ const CancellationRequestScreen = ({
 
     Alert.alert(
       'Konfirmasi Pembatalan',
-      'Pembatalan dilakukan maka pengembalian DP hanya setengah. Apakah Anda yakin ingin membatalkan booking ini?',
+      'DP tidak akan di kembalikan lagi. Apakah Anda yakin ingin membatalkan booking ini?',
       [
         { text: 'Batal', style: 'cancel' },
         {
@@ -94,7 +94,7 @@ const CancellationRequestScreen = ({
           <View style={styles.warningBox}>
             <Ionicons name="warning" size={24} color="#FF4444" />
             <Text style={styles.warningText}>
-              Pembatalan dilakukan maka pengembalian DP hanya setengah
+              DP tidak akan di kembalikan lagi
             </Text>
           </View>
 

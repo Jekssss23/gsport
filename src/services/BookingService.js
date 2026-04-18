@@ -13,16 +13,33 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { db } from '../config/firebase.js';
+import { API_BASE_URL } from '../config/api.js';
 
 export class BookingService {
+  static isMysqlReservationId(bookingId) {
+    if (typeof bookingId === 'number') return true;
+    if (typeof bookingId !== 'string') return false;
+    return /^\d+$/.test(bookingId);
+  }
+
   // Get all facilities (Futsal, Badminton, Pickleball)
   static async getFacilities() {
     try {
-      const facilitiesRef = collection(db, 'facilities');
-      const snapshot = await getDocs(facilitiesRef);
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+      const res = await fetch(`${API_BASE_URL}/reservation/facilities`);
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.message || 'Failed to fetch facilities');
+      }
+
+      return (json.data || []).map((f) => ({
+        id: Number(f.id),
+        name: f.name,
+        pricePerHour: Number(f.price_per_hour || 0),
+        dpPercentage: Number(f.dp_percentage || 0),
+        courts: (f.courts || []).map((c) => ({
+          id: Number(c.id),
+          name: c.name,
+        })),
       }));
     } catch (error) {
       console.error('Error fetching facilities:', error);
@@ -68,31 +85,12 @@ export class BookingService {
   // Get available time slots (7 AM - 11 PM) for specific court and date
   static async getAvailableSlots(courtId, date) {
     try {
-      // Generate all possible slots from 7 AM to 11 PM (7-23)
-      const allSlots = Array.from({ length: 17 }, (_, i) => i + 7);
-
-      // Get existing bookings for this court and date
-      const bookingsRef = collection(db, 'bookings');
-      const q = query(
-        bookingsRef,
-        where('courtId', '==', courtId),
-        where('date', '==', date),
-        where('status', 'in', ['confirmed', 'pending'])
-      );
-
-      const snapshot = await getDocs(q);
-      const bookedSlots = new Set();
-
-      // Collect all booked time slots
-      snapshot.docs.forEach(doc => {
-        const booking = doc.data();
-        if (booking.timeSlots && Array.isArray(booking.timeSlots)) {
-          booking.timeSlots.forEach(slot => bookedSlots.add(slot));
-        }
-      });
-
-      // Return only available slots
-      return allSlots.filter(slot => !bookedSlots.has(slot));
+      const res = await fetch(`${API_BASE_URL}/reservation/availability?court_id=${encodeURIComponent(courtId)}&date=${encodeURIComponent(date)}`);
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.message || 'Failed to fetch availability');
+      }
+      return (json.data?.available_hours || []).map((h) => Number(h));
     } catch (error) {
       console.error('Error fetching available slots:', error);
       throw error;
@@ -125,68 +123,80 @@ export class BookingService {
       // 1. Check for manual schedule first (Override)
       const manualSchedules = await this.getEmployeesOnDuty(date);
       const manualStaff = manualSchedules.find(s => {
+        // Strict check: Only Sports division
+        if (s.divisi !== 'Sports') return false;
+
         const startHour = parseInt(s.startTime.split(':')[0]);
         const endHour = parseInt(s.endTime.split(':')[0]);
         const isTimeMatch = hour >= startHour && hour < endHour;
+        if (!isTimeMatch) return false;
 
-        let outletMatch = true;
-        if (s.divisi === 'Sports') {
-          const lowerFacility = facilityName.toLowerCase();
-          if (lowerFacility.includes('futsal')) outletMatch = s.outlet === 'futsal';
-          else if (lowerFacility.includes('swimming') || lowerFacility.includes('renang')) outletMatch = s.outlet === 'swimming';
-          else if (lowerFacility.includes('badminton') || lowerFacility.includes('pickleball')) outletMatch = s.outlet === 'pickleball_badminton';
-        }
-        return isTimeMatch && outletMatch;
+        // Location match based on facility
+        const lowerFacility = facilityName.toLowerCase();
+        let outletMatch = false;
+        if (lowerFacility.includes('futsal')) outletMatch = s.outlet === 'futsal' || s.outlet === 'all';
+        else if (lowerFacility.includes('swimming') || lowerFacility.includes('renang')) outletMatch = s.outlet === 'swimming' || s.outlet === 'all';
+        else if (lowerFacility.includes('badminton') || lowerFacility.includes('pickleball')) outletMatch = s.outlet === 'pickleball_badminton' || s.outlet === 'all';
+        
+        return outletMatch;
       });
 
       if (manualStaff) return manualStaff;
 
       // 2. If no manual schedule, check Rolling Patterns
-      const employeesRef = collection(db, 'employees');
-      const empSnapshot = await getDocs(employeesRef);
-      const employees = empSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const res = await fetch(`${API_BASE_URL}/reservation/staff_schedules`);
+      const json = await res.json();
+      const employees = json.ok ? json.data : [];
 
       const targetDate = new Date(date);
       const dayOfWeek = targetDate.getDay() === 0 ? 6 : targetDate.getDay() - 1; // 0: Mon, ..., 6: Sun
 
       for (const emp of employees) {
-        if (emp.rollingConfig && emp.rollingConfig.enabled) {
-          const startDate = new Date(emp.rollingConfig.startDate);
+        // Strict check: Only Sports division
+        if (emp.divisi !== 'Sports') continue;
 
-          // Calculate weeks passed since startDate
-          const diffTime = targetDate.getTime() - startDate.getTime();
-          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-          const weeksPassed = Math.floor(diffDays / 7);
-
-          if (weeksPassed < 0) continue; // Pattern hasn't started yet
-
-          const weekIndex = weeksPassed % emp.rollingConfig.weeks.length;
-          const config = emp.rollingConfig.weeks[weekIndex];
-
-          if (config.days.includes(dayOfWeek)) {
-            const startHour = parseInt(config.startTime.split(':')[0]);
-            const endHour = parseInt(config.endTime.split(':')[0]);
-            const isTimeMatch = hour >= startHour && hour < endHour;
-
-            let outletMatch = true;
-            if (emp.divisi === 'Sports') {
-              const lowerFacility = facilityName.toLowerCase();
-              if (lowerFacility.includes('futsal')) outletMatch = config.outlet === 'futsal';
-              else if (lowerFacility.includes('swimming') || lowerFacility.includes('renang')) outletMatch = config.outlet === 'swimming';
-              else if (lowerFacility.includes('badminton') || lowerFacility.includes('pickleball')) outletMatch = config.outlet === 'pickleball_badminton';
+        if (emp.jadwal_operasional && typeof emp.jadwal_operasional === 'string' && emp.jadwal_operasional.trim() !== '') {
+          try {
+            const config = JSON.parse(emp.jadwal_operasional);
+            
+            // Check if today is the regular day off
+            if (parseInt(config.libur) === dayOfWeek) {
+              continue;
             }
 
-            if (isTimeMatch && outletMatch) {
+            // Determine if current week is odd or even mathematically
+            const startDate = new Date(targetDate.getFullYear(), 0, 1);
+            const days = Math.floor((targetDate - startDate) / (24 * 60 * 60 * 1000));
+            const weekNumber = Math.ceil(days / 7);
+            const isGanjil = weekNumber % 2 !== 0;
+
+            const currentShiftStr = isGanjil ? config.ganjil : config.genap;
+            if (!currentShiftStr) continue;
+            
+            const [startStr, endStr] = currentShiftStr.split('-');
+            const startHour = parseInt(startStr.split(':')[0]);
+            const endHour = parseInt(endStr.split(':')[0]);
+
+            const isTimeMatch = hour >= startHour && hour < endHour;
+            if (!isTimeMatch) continue;
+
+            // Location match based on facility
+            const lowerFacility = facilityName.toLowerCase();
+            let outletMatch = false;
+            if (lowerFacility.includes('futsal')) outletMatch = config.lokasi === 'futsal' || config.lokasi === 'all';
+            else if (lowerFacility.includes('swimming') || lowerFacility.includes('renang')) outletMatch = config.lokasi === 'swimming' || config.lokasi === 'all';
+            else if (lowerFacility.includes('badminton') || lowerFacility.includes('pickleball')) outletMatch = config.lokasi === 'pickleball_badminton' || config.lokasi === 'all';
+
+            if (outletMatch) {
               return {
-                employeeId: emp.id,
+                employeeId: 'EMP_' + emp.id,
                 employeeName: emp.name,
-                employeeImageUrl: emp.imageUrl,
+                employeeImageUrl: emp.imageUrl || '',
                 divisi: emp.divisi,
-                // Add indicator that this is from rolling
                 isRolling: true
               };
             }
-          }
+          } catch(e) {}
         }
       }
 
@@ -223,39 +233,50 @@ export class BookingService {
   // Create new booking with all required data
   static async createBooking(bookingData) {
     try {
+      // Normalize payload keys (some screens use different names)
+      const timeSlots = bookingData.timeSlots || bookingData.slots || bookingData.time_slots;
+      const paymentProof =
+        bookingData.paymentProof || bookingData.paymentProofUrl || bookingData.payment_proof_url;
+
       // Validate required fields
       if (!bookingData.userId || !bookingData.courtId || !bookingData.date ||
-        !bookingData.timeSlots || bookingData.timeSlots.length === 0 ||
-        !bookingData.paymentProof) {
+        !Array.isArray(timeSlots) || timeSlots.length === 0 ||
+        !paymentProof) {
         throw new Error('Missing required booking data');
       }
 
-      // Get facility data
-      const facility = await this.getFacilityByCourtId(bookingData.courtId);
-
-      // Calculate price
-      const { totalPrice, dpAmount } = this.calculateBookingPrice(facility, bookingData.timeSlots);
-
-      // Check if slots are still available
-      const availableSlots = await this.getAvailableSlots(bookingData.courtId, bookingData.date);
-      const requestedSlots = bookingData.timeSlots;
-      const allSlotsAvailable = requestedSlots.every(slot => availableSlots.includes(slot));
-
-      if (!allSlotsAvailable) {
-        throw new Error('Some time slots are no longer available');
+      const facilityId = bookingData.facilityId;
+      if (!facilityId) {
+        throw new Error('Missing facilityId');
       }
 
-      const bookingsRef = collection(db, 'bookings');
-      const docRef = await addDoc(bookingsRef, {
-        ...bookingData,
-        totalPrice,
-        dpAmount,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        bookingDate: Timestamp.now()
-      });
+      const payload = {
+        firebase_uid: bookingData.userId,
+        user_name: bookingData.userName || bookingData.userId,
+        user_phone: bookingData.userPhone || '',
+        facility_id: Number(facilityId),
+        court_id: Number(bookingData.courtId),
+        booking_date: bookingData.date,
+        time_slots: timeSlots,
+        payment_proof_url: paymentProof,
+        total_amount: Number(bookingData.totalAmount || 0),
+        dp_amount: Number(bookingData.dpAmount || 0),
+        remaining_amount: Number(bookingData.remainingAmount || 0),
+      };
 
-      return docRef.id;
+      const res = await fetch(`${API_BASE_URL}/reservation/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.message || 'Failed to create reservation');
+      }
+
+      return json.data?.reservation_id;
     } catch (error) {
       console.error('Error creating booking:', error);
       throw error;
@@ -265,46 +286,32 @@ export class BookingService {
   // Get user's booking history
   static async getUserBookings(userId) {
     try {
-      console.log('Fetching bookings for userId:', userId);
-      const bookingsRef = collection(db, 'bookings');
+      const res = await fetch(`${API_BASE_URL}/reservation/my?firebase_uid=${encodeURIComponent(userId)}`);
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.message || 'Failed to fetch reservations');
+      }
 
-      // Simple query without orderBy first
-      const q = query(
-        bookingsRef,
-        where('userId', '==', userId)
-      );
-
-      const snapshot = await getDocs(q);
-      console.log('Found bookings:', snapshot.size);
-
-      // Sort manually in JavaScript
-      const bookings = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+      return (json.data || []).map((r) => ({
+        id: Number(r.id),
+        userId: r.firebase_uid,
+        userName: r.user_name,
+        userPhone: r.user_phone,
+        facilityId: Number(r.facility_id),
+        facilityName: r.facility_name,
+        courtId: Number(r.court_id),
+        courtName: r.court_name,
+        date: r.booking_date,
+        timeSlots: (r.time_slots || []).map((h) => Number(h)),
+        totalHours: (r.time_slots || []).length,
+        totalAmount: Number(r.total_amount || 0),
+        dpAmount: Number(r.dp_amount || 0),
+        remainingAmount: Number(r.remaining_amount || 0),
+        paymentProof: r.payment_proof_url,
+        status: r.status,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
       }));
-
-      // Add facilityName and userName
-      const enrichedBookings = await Promise.all(
-        bookings.map(async (booking) => {
-          const user = await this.getUser(booking.userId);
-          const facility = await this.getFacilityByCourtId(booking.courtId);
-          return {
-            ...booking,
-            userName: user ? user.name || user.email : 'Unknown',
-            facilityName: facility ? facility.name : 'Unknown',
-            courtName: facility ? facility.selectedCourt.name : booking.courtId,
-          };
-        })
-      );
-
-      // Sort by createdAt manually
-      enrichedBookings.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis() || 0;
-        const timeB = b.createdAt?.toMillis() || 0;
-        return timeB - timeA; // Descending
-      });
-
-      return enrichedBookings;
     } catch (error) {
       console.error('Error fetching user bookings:', error);
       throw error;
@@ -338,6 +345,9 @@ export class BookingService {
   // Update booking status
   static async updateBookingStatus(bookingId, status) {
     try {
+      if (this.isMysqlReservationId(bookingId)) {
+        return;
+      }
       const bookingRef = doc(db, 'bookings', bookingId);
       await updateDoc(bookingRef, {
         status,
@@ -352,6 +362,9 @@ export class BookingService {
   // Update booking with additional data
   static async updateBooking(bookingId, updateData) {
     try {
+      if (this.isMysqlReservationId(bookingId)) {
+        return;
+      }
       const bookingRef = doc(db, 'bookings', bookingId);
       await updateDoc(bookingRef, {
         ...updateData,
@@ -381,13 +394,34 @@ export class BookingService {
   // Request cancellation (user initiates)
   static async requestCancellation(bookingId, reason) {
     try {
-      const bookingRef = doc(db, 'bookings', bookingId);
-      await updateDoc(bookingRef, {
-        status: 'cancellation_requested',
-        cancellationReason: reason,
-        cancellationRequestedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+      // Handle both MySQL reservations (number) and Firestore bookings (string)
+      if (this.isMysqlReservationId(bookingId)) {
+        // For MySQL reservations, use API to update status
+        const res = await fetch(`${API_BASE_URL}/reservation/cancel`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            reservation_id: Number(bookingId),
+            reason: reason
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          throw new Error(json.message || 'Failed to request cancellation');
+        }
+        return json.data;
+      } else {
+        // For Firestore bookings, update document directly
+        const bookingRef = doc(db, 'bookings', String(bookingId));
+        await updateDoc(bookingRef, {
+          status: 'cancellation_requested',
+          cancellationReason: reason,
+          cancellationRequestedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
     } catch (error) {
       console.error('Error requesting cancellation:', error);
       throw error;
@@ -397,12 +431,32 @@ export class BookingService {
   // Approve cancellation (admin approves)
   static async approveCancellation(bookingId) {
     try {
-      const bookingRef = doc(db, 'bookings', bookingId);
-      await updateDoc(bookingRef, {
-        status: 'cancelled',
-        cancellationApprovedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+      // Handle both MySQL reservations (number) and Firestore bookings (string)
+      if (this.isMysqlReservationId(bookingId)) {
+        // For MySQL reservations, use API to update status
+        const res = await fetch(`${API_BASE_URL}/reservation/approve_cancel`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            reservation_id: Number(bookingId)
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          throw new Error(json.message || 'Failed to approve cancellation');
+        }
+        return json.data;
+      } else {
+        // For Firestore bookings, update document directly
+        const bookingRef = doc(db, 'bookings', String(bookingId));
+        await updateDoc(bookingRef, {
+          status: 'cancelled',
+          cancellationApprovedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
     } catch (error) {
       console.error('Error approving cancellation:', error);
       throw error;
@@ -412,12 +466,32 @@ export class BookingService {
   // Reject cancellation (admin rejects)
   static async rejectCancellation(bookingId) {
     try {
-      const bookingRef = doc(db, 'bookings', bookingId);
-      await updateDoc(bookingRef, {
-        status: 'confirmed',
-        cancellationRejectedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+      // Handle both MySQL reservations (number) and Firestore bookings (string)
+      if (this.isMysqlReservationId(bookingId)) {
+        // For MySQL reservations, use API to update status
+        const res = await fetch(`${API_BASE_URL}/reservation/reject_cancel`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            reservation_id: Number(bookingId)
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          throw new Error(json.message || 'Failed to reject cancellation');
+        }
+        return json.data;
+      } else {
+        // For Firestore bookings, update document directly
+        const bookingRef = doc(db, 'bookings', String(bookingId));
+        await updateDoc(bookingRef, {
+          status: 'confirmed',
+          cancellationRejectedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
     } catch (error) {
       console.error('Error rejecting cancellation:', error);
       throw error;
@@ -487,14 +561,89 @@ export class BookingService {
   // Add review
   static async addReview(reviewData) {
     try {
+      // First, sync MySQL booking to Firestore if needed
+      await this.syncBookingToFirestore(reviewData.bookingId);
+
       const reviewsRef = collection(db, 'reviews');
       await addDoc(reviewsRef, {
         ...reviewData,
+        bookingId: String(reviewData.bookingId),
         createdAt: serverTimestamp()
       });
+
+      // Update hasRated in Firestore
+      const bookingRef = doc(db, 'bookings', String(reviewData.bookingId));
+      await updateDoc(bookingRef, {
+        hasRated: true,
+        updatedAt: serverTimestamp()
+      });
+
+      // Update has_rated in MySQL via API
+      if (this.isMysqlReservationId(reviewData.bookingId)) {
+        try {
+          await fetch(`${API_BASE_URL}/reservation/rate`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              reservation_id: Number(reviewData.bookingId),
+              has_rated: 1
+            }),
+          });
+        } catch (e) {
+          console.error('Error updating MySQL rating status:', e);
+        }
+      }
     } catch (error) {
       console.error('Error adding review:', error);
       throw error;
+    }
+  }
+
+  // Sync MySQL booking to Firestore
+  static async syncBookingToFirestore(bookingId) {
+    try {
+      // Check if booking exists in Firestore
+      const bookingRef = doc(db, 'bookings', String(bookingId));
+      const bookingDoc = await getDoc(bookingRef);
+      
+      if (!bookingDoc.exists()) {
+        console.log('DEBUG: Syncing MySQL booking to Firestore:', bookingId);
+        
+        // Get booking data from API
+        const res = await fetch(`${API_BASE_URL}/reservation/get_booking?id=${bookingId}`);
+        const json = await res.json();
+        
+        if (res.ok && json.data) {
+          const booking = json.data;
+          await setDoc(bookingRef, {
+            id: String(booking.id),
+            firebase_uid: booking.firebase_uid,
+            user_name: booking.user_name,
+            user_phone: booking.user_phone,
+            facility_id: booking.facility_id,
+            facility_name: booking.facility_name,
+            court_id: booking.court_id,
+            court_name: booking.court_name,
+            booking_date: booking.booking_date,
+            time_slots: booking.time_slots || [],
+            total_amount: booking.total_amount || 0,
+            dp_amount: booking.dp_amount || 0,
+            remaining_amount: booking.remaining_amount || 0,
+            payment_proof_url: booking.payment_proof_url,
+            status: booking.status,
+            created_at: booking.created_at,
+            updated_at: booking.updated_at,
+            hasRated: false,
+            createdAt: serverTimestamp()
+          });
+          console.log('DEBUG: MySQL booking synced to Firestore successfully');
+        }
+      }
+    } catch (error) {
+      console.error('Error syncing booking to Firestore:', error);
+      // Don't throw error, continue with review submission
     }
   }
 
@@ -540,7 +689,7 @@ export class BookingService {
       const bookingsRef = collection(db, 'bookings');
       const q = query(
         bookingsRef,
-        where('status', 'in', ['confirmed', 'pending'])
+        where('status', '==', 'confirmed')
       );
 
       const snapshot = await getDocs(q);
@@ -548,9 +697,15 @@ export class BookingService {
 
       for (const docSnapshot of snapshot.docs) {
         const booking = docSnapshot.data();
-        const bookingDateTime = new Date(`${booking.date}T${booking.endTime || '23:59'}`);
+        // Get the last time slot to determine the actual end time
+        const lastTimeSlot = booking.timeSlots && booking.timeSlots.length > 0 
+          ? Math.max(...booking.timeSlots) 
+          : 23;
+        
+        // Create booking end datetime
+        const bookingEndDateTime = new Date(`${booking.bookingDate}T${String(lastTimeSlot + 1).padStart(2, '0')}:00:00`);
 
-        if (bookingDateTime < now) {
+        if (bookingEndDateTime < now) {
           await this.markBookingCompleted(docSnapshot.id);
         }
       }

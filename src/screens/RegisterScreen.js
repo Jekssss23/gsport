@@ -1,67 +1,55 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Dimensions } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase.js';
 import { theme } from '../styles/theme.js';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+
+const { width } = Dimensions.get('window');
 
 export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isNameFocused, setIsNameFocused] = useState(false);
-  const [isEmailFocused, setIsEmailFocused] = useState(false);
-  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleRegister = async () => {
-    if (!email || !password || !name) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!email || !password || !name || !phoneNumber) {
+      Alert.alert('Error', 'Please fill in all fields (Full Name, Phone Number, Email, Password)');
       return;
     }
 
     setLoading(true);
     try {
-      console.log('Starting registration...');
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      console.log('User created successfully:', user.uid);
 
-      // Save user data to Firestore - semua registrasi otomatis jadi user
       const userData = {
         email: user.email,
         name: name,
-        role: 'user', // Semua registrasi baru otomatis jadi user
+        phoneNumber: phoneNumber,
+        role: 'user',
         createdAt: new Date().toISOString(),
       };
       
-      console.log('Saving user data to Firestore:', userData);
       await setDoc(doc(db, 'users', user.uid), userData);
-      console.log('User data saved successfully to Firestore');
-
       Alert.alert('Success', 'Account created successfully!');
     } catch (error) {
-      console.error('Registration error details:', error);
-      console.error('Error code:', error.code);
-      console.error('Error message:', error.message);
-      
       let errorMessage = 'Registration failed';
-      
-      // Provide more specific error messages
       if (error.code === 'auth/email-already-in-use') {
         errorMessage = 'Email already in use';
       } else if (error.code === 'auth/weak-password') {
         errorMessage = 'Password is too weak';
       } else if (error.code === 'auth/invalid-email') {
         errorMessage = 'Invalid email address';
-      } else if (error.code === 'permission-denied') {
-        errorMessage = 'Permission denied. Check Firestore security rules.';
-      } else if (error.code === 'unavailable') {
-        errorMessage = 'Service unavailable. Please check your internet connection.';
       } else {
         errorMessage = error.message || 'An unknown error occurred';
       }
-      
       Alert.alert('Registration Error', errorMessage);
     } finally {
       setLoading(false);
@@ -70,71 +58,122 @@ export default function RegisterScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.loginBox}>
-        <Text style={styles.title}>Register</Text>
-        
-        <View style={styles.userBox}>
-          <TextInput
-            style={[styles.input, (isNameFocused || name) && styles.inputFocused]}
-            value={name}
-            onChangeText={setName}
-            onFocus={() => setIsNameFocused(true)}
-            onBlur={() => setIsNameFocused(false)}
-            placeholderTextColor="transparent"
-          />
-          <Text style={[styles.label, (isNameFocused || name) && styles.labelFocused]}>Full Name</Text>
-        </View>
-
-        <View style={styles.userBox}>
-          <TextInput
-            style={[styles.input, (isEmailFocused || email) && styles.inputFocused]}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            onFocus={() => setIsEmailFocused(true)}
-            onBlur={() => setIsEmailFocused(false)}
-            placeholderTextColor="transparent"
-          />
-          <Text style={[styles.label, (isEmailFocused || email) && styles.labelFocused]}>Email</Text>
-        </View>
-
-        <View style={styles.userBox}>
-          <TextInput
-            style={[styles.input, (isPasswordFocused || password) && styles.inputFocused]}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            onFocus={() => setIsPasswordFocused(true)}
-            onBlur={() => setIsPasswordFocused(false)}
-            placeholderTextColor="transparent"
-          />
-          <Text style={[styles.label, (isPasswordFocused || password) && styles.labelFocused]}>Password</Text>
-        </View>
-
-
-
-        {loading ? (
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        ) : (
-          <TouchableOpacity onPress={handleRegister} style={styles.buttonContainer}>
-             <View style={styles.button}>
-                <View style={[styles.borderSpan, styles.borderTop]} />
-                <View style={[styles.borderSpan, styles.borderRight]} />
-                <View style={[styles.borderSpan, styles.borderBottom]} />
-                <View style={[styles.borderSpan, styles.borderLeft]} />
-                <Text style={styles.buttonText}>Submit</Text>
-             </View>
+      <StatusBar style="light" />
+      <LinearGradient
+        colors={[theme.colors.background, '#000000']}
+        style={StyleSheet.absoluteFill}
+      />
+      
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
-        )}
 
-        <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                <Text style={styles.link}>Login</Text>
-            </TouchableOpacity>
-        </View>
-      </View>
+          <View style={styles.header}>
+            <Text style={styles.title}>Create Account</Text>
+            <Text style={styles.subtitle}>Join GSC Sports Center today</Text>
+          </View>
+
+          <View style={styles.formContainer}>
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Full Name</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="person-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter your full name"
+                  placeholderTextColor={theme.colors.textTertiary}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Email Address</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="mail-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  placeholder="Enter your email"
+                  placeholderTextColor={theme.colors.textTertiary}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Phone Number</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="call-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                  placeholder="Enter your phone (e.g. 0812...)"
+                  placeholderTextColor={theme.colors.textTertiary}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Password</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  placeholder="Create a password"
+                  placeholderTextColor={theme.colors.textTertiary}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons 
+                    name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                    size={20} 
+                    color={theme.colors.textSecondary} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {loading ? (
+              <ActivityIndicator size="large" color={theme.colors.primary} style={styles.loader} />
+            ) : (
+              <TouchableOpacity onPress={handleRegister} activeOpacity={0.8} style={styles.registerButton}>
+                <LinearGradient
+                  colors={theme.gradients.primary}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.gradientButton}
+                >
+                  <Text style={styles.registerButtonText}>CREATE ACCOUNT</Text>
+                  <Ionicons name="person-add-outline" size={20} color="white" />
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Already have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                <Text style={styles.loginLinkText}>Sign In</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -142,117 +181,105 @@ export default function RegisterScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: theme.colors.background,
   },
-  loginBox: {
-    width: 300,
-    padding: 40,
-    backgroundColor: theme.colors.cardBackground,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 15 },
-    shadowOpacity: 0.6,
-    shadowRadius: 25,
-    elevation: 10,
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 30,
+    paddingTop: 60,
+    paddingBottom: 40,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 30,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+  },
+  header: {
+    marginBottom: 40,
   },
   title: {
-    margin: 0,
-    padding: 0,
-    color: theme.colors.text,
-    textAlign: 'center',
-    fontSize: 24,
+    fontSize: 32,
     fontWeight: 'bold',
-    letterSpacing: 1,
-    marginBottom: 30,
+    color: theme.colors.text,
+    marginBottom: 8,
   },
-  userBox: {
-    position: 'relative',
-    marginBottom: 30,
+  subtitle: {
+    fontSize: 16,
+    color: theme.colors.textSecondary,
+  },
+  formContainer: {
+    width: '100%',
+  },
+  inputWrapper: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginLeft: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.medium,
+    paddingHorizontal: 15,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+    height: 55,
+  },
+  inputIcon: {
+    marginRight: 12,
   },
   input: {
-    width: '100%',
-    paddingVertical: 10,
-    fontSize: 16,
+    flex: 1,
     color: theme.colors.text,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.inputBorder,
-    backgroundColor: 'transparent',
-  },
-  label: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    paddingVertical: 10,
     fontSize: 16,
-    color: theme.colors.text,
-    pointerEvents: 'none',
   },
-  labelFocused: {
-    top: -20,
-    left: 0,
-    color: theme.colors.primary,
-    fontSize: 12,
-  },
-
-  buttonContainer: {
+  registerButton: {
     marginTop: 20,
+    borderRadius: theme.borderRadius.medium,
+    overflow: 'hidden',
+    ...theme.shadows.medium,
+  },
+  gradientButton: {
+    height: 55,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  button: {
-    position: 'relative',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    overflow: 'hidden',
-  },
-  buttonText: {
-    color: theme.colors.buttonText,
+  registerButtonText: {
+    color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 3,
+    letterSpacing: 2,
+    marginRight: 10,
   },
-  borderSpan: {
-    position: 'absolute',
-    backgroundColor: theme.colors.primary, 
-  },
-  borderTop: {
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: 2,
-  },
-  borderRight: {
-    top: 0,
-    right: 0,
-    width: 2,
-    height: '100%',
-  },
-  borderBottom: {
-    bottom: 0,
-    right: 0,
-    width: '100%',
-    height: 2,
-  },
-  borderLeft: {
-    bottom: 0,
-    left: 0,
-    width: 2,
-    height: '100%',
+  loader: {
+    marginVertical: 10,
   },
   footer: {
-      flexDirection: 'row',
-      marginTop: 20,
-      justifyContent: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 40,
   },
   footerText: {
-      color: '#aaa',
-      fontSize: 14,
+    color: theme.colors.textSecondary,
+    fontSize: 14,
   },
-  link: {
-      color: theme.colors.text,
-      fontSize: 14,
-      textDecorationLine: 'none',
+  loginLinkText: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });

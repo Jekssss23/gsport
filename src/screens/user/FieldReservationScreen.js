@@ -9,13 +9,20 @@ import {
   Image,
   TextInput,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase.js';
+import { API_BASE_URL } from '../../config/api.js';
 import { BookingService } from '../../services/BookingService';
 import { CloudinaryService } from '../../services/CloudinaryService';
 import { theme } from '../../styles/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+
+const { width } = Dimensions.get('window');
 
 const FieldReservationScreen = ({ navigation, route }) => {
   const { user } = route.params || {};
@@ -30,8 +37,43 @@ const FieldReservationScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(false);
   const [loadingFacilities, setLoadingFacilities] = useState(true);
   const [loadingSlots, setLoadingSlots] = useState(false);
-  const [staffMap, setStaffMap] = useState({}); // Mapping hour -> staff object
-  const [step, setStep] = useState(1); // 1: Facility, 2: Court & Time, 3: Payment
+  const [staffMap, setStaffMap] = useState({});
+  const [step, setStep] = useState(1);
+  const [dateOptions, setDateOptions] = useState([]);
+
+  useEffect(() => {
+    const dates = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      
+      const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const dayDate = d.getDate();
+      const monthName = d.toLocaleDateString('en-US', { month: 'short' });
+      const fullDate = d.toISOString().split('T')[0];
+      
+      dates.push({
+        dayName,
+        dayDate,
+        monthName,
+        fullDate,
+        isToday: i === 0
+      });
+    }
+    setDateOptions(dates);
+  }, []);
+
+  const getRealTimeAvailableSlots = (allSlots) => {
+    const tzOffset = (new Date()).getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(Date.now() - tzOffset)).toISOString().slice(0, -1);
+    const todayStr = localISOTime.split('T')[0];
+    
+    if (selectedDate === todayStr) {
+      const currentHour = new Date().getHours();
+      return allSlots.filter(hour => hour > currentHour);
+    }
+    return allSlots;
+  };
 
   useEffect(() => {
     if (!user) {
@@ -55,13 +97,11 @@ const FieldReservationScreen = ({ navigation, route }) => {
   const loadFacilities = async () => {
     try {
       setLoadingFacilities(true);
-      console.log('Loading facilities...');
       const facilities = await BookingService.getFacilities();
-      console.log('Facilities loaded:', facilities.length);
       setFacilities(facilities);
     } catch (error) {
       console.error('Error loading facilities:', error);
-      Alert.alert('Error', 'Failed to load facilities: ' + error.message);
+      Alert.alert('Error', 'Failed to load facilities');
     } finally {
       setLoadingFacilities(false);
     }
@@ -70,32 +110,38 @@ const FieldReservationScreen = ({ navigation, route }) => {
   const loadAvailableSlots = async () => {
     try {
       setLoadingSlots(true);
-      // Get all slots (7-23)
       const allSlots = Array.from({ length: 17 }, (_, i) => i + 7);
+      const apiAvailableSlots = await BookingService.getAvailableSlots(selectedCourt.id, selectedDate);
+      const realTimeSlots = getRealTimeAvailableSlots(apiAvailableSlots);
 
-      // Get booked slots
-      const availableSlots = await BookingService.getAvailableSlots(selectedCourt.id, selectedDate);
+      const tzOffset = (new Date()).getTimezoneOffset() * 60000;
+      const localISOTime = (new Date(Date.now() - tzOffset)).toISOString().slice(0, -1);
+      const todayStr = localISOTime.split('T')[0];
+      const currentHour = new Date().getHours();
 
-      // Create slot objects with availability status
-      const slotsWithStatus = allSlots.map(hour => ({
-        hour,
-        isAvailable: availableSlots.includes(hour)
-      }));
+      const slotsWithStatus = allSlots.map(hour => {
+        const isPassed = selectedDate === todayStr && hour <= currentHour;
+        const isBooked = !apiAvailableSlots.includes(hour) && !isPassed;
+        return {
+          hour,
+          isAvailable: realTimeSlots.includes(hour),
+          isPassed,
+          isBooked,
+        };
+      });
 
       setAvailableSlots(slotsWithStatus);
-      setSelectedSlots([]); // Reset selected slots when loading new availability
-      setStaffMap({}); // Reset staff map
+      setSelectedSlots([]);
+      setStaffMap({});
 
-      // Pre-load staff for available slots
       const newStaffMap = {};
-      for (const slot of availableSlots) {
+      for (const slot of realTimeSlots) {
         const staff = await BookingService.getStaffBySlot(selectedDate, slot, selectedFacility.name);
         if (staff) {
           newStaffMap[slot] = staff;
         }
       }
       setStaffMap(newStaffMap);
-
     } catch (error) {
       console.error('Error loading slots:', error);
       Alert.alert('Error', 'Failed to load available slots');
@@ -115,11 +161,9 @@ const FieldReservationScreen = ({ navigation, route }) => {
   const selectCourt = (court) => {
     setSelectedCourt(court);
     setSelectedSlots([]);
-    // Don't change step - stay on same page
   };
 
   const toggleTimeSlot = (slotObj) => {
-    // Don't allow selecting unavailable slots
     if (!slotObj.isAvailable) return;
 
     const hour = slotObj.hour;
@@ -147,23 +191,20 @@ const FieldReservationScreen = ({ navigation, route }) => {
 
   const uploadPaymentProof = async () => {
     if (!paymentProof) return null;
-
     try {
       const userId = user.uid || user.email?.replace(/[@.]/g, '_') || Date.now();
       const imageUrl = await CloudinaryService.uploadImage(paymentProof.uri, userId);
       return imageUrl;
     } catch (error) {
       console.error('Upload error:', error);
-      throw new Error('Failed to upload payment proof: ' + error.message);
+      throw new Error('Failed to upload payment proof');
     }
   };
 
   const calculateTotal = () => {
     if (!selectedFacility || selectedSlots.length === 0) return { total: 0, dp: 0 };
-
     const total = selectedFacility.pricePerHour * selectedSlots.length;
     const dp = Math.round(total * (selectedFacility.dpPercentage / 100));
-
     return { total, dp, remaining: total - dp };
   };
 
@@ -172,7 +213,6 @@ const FieldReservationScreen = ({ navigation, route }) => {
       Alert.alert('Error', 'Please upload payment proof');
       return;
     }
-
     if (selectedSlots.length === 0) {
       Alert.alert('Error', 'Please select at least one time slot');
       return;
@@ -180,12 +220,11 @@ const FieldReservationScreen = ({ navigation, route }) => {
 
     setLoading(true);
     try {
-      // Check if slots are still available before uploading
       const currentAvailableSlots = await BookingService.getAvailableSlots(selectedCourt.id, selectedDate);
       const allSlotsStillAvailable = selectedSlots.every(slot => currentAvailableSlots.includes(slot));
 
       if (!allSlotsStillAvailable) {
-        Alert.alert('Error', 'Some time slots are no longer available. Please select different slots.');
+        Alert.alert('Error', 'Some slots are no longer available. Please select different slots.');
         setLoading(false);
         setStep(3);
         return;
@@ -193,267 +232,322 @@ const FieldReservationScreen = ({ navigation, route }) => {
 
       const paymentProofUrl = await uploadPaymentProof();
       const { total, dp, remaining } = calculateTotal();
-
-      // Ambil staff dari slot pertama yang dipilih (asumsi staff sama jika slot berurutan)
       const firstSlot = selectedSlots[0];
       const assignedStaff = staffMap[firstSlot];
 
       const bookingData = {
-        userId: user.uid || user.email,
-        userName: user.displayName || user.email,
+        userId: user.uid,
+        userEmail: user.email,
+        userName: user.displayName || user.email.split('@')[0],
         userPhone: user.phoneNumber || '',
         facilityId: selectedFacility.id,
         facilityName: selectedFacility.name,
         courtId: selectedCourt.id,
         courtName: selectedCourt.name,
         date: selectedDate,
-        timeSlots: selectedSlots,
-        totalHours: selectedSlots.length,
-        pricePerHour: selectedFacility.pricePerHour,
+        slots: selectedSlots,
+        // Keep both naming styles to avoid future mismatches.
+        totalPrice: total,
+        downPayment: dp,
+        remainingPayment: remaining,
         totalAmount: total,
         dpAmount: dp,
         remainingAmount: remaining,
-        paymentProof: paymentProofUrl,
+        paymentProofUrl: paymentProofUrl,
         status: 'pending',
-        staffOnDutyId: assignedStaff?.employeeId || null,
-        staffOnDutyName: assignedStaff?.employeeName || 'No staff assigned',
-        staffOnDutyImageUrl: assignedStaff?.employeeImageUrl || ''
+        assignedStaffId: assignedStaff?.id || null,
+        assignedStaffName: assignedStaff?.name || null,
+        assignedStaffEmail: assignedStaff?.email || null,
+        createdAt: serverTimestamp()
       };
 
       await BookingService.createBooking(bookingData);
 
-      Alert.alert(
-        'Success!',
-        'Your booking has been submitted and is pending approval. Check your reservation history for updates.',
-        [{
-          text: 'View History',
-          onPress: () => navigation.navigate('MyReservationHistory')
-        },
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack()
-        }]
-      );
+      // Record financial transaction via MySQL API
+      try {
+        const payload = {
+          firebase_uid: user.uid,
+          user_email: user.email,
+          amount: dp,
+          transaction_type: 'booking',
+          description: `Booking DP: ${selectedFacility.name} - ${selectedCourt.name} (${selectedDate})`
+        };
+
+        await fetch(`${API_BASE_URL}/finance/record_transaction`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+      } catch (e) {
+        console.error("Error logging finance:", e);
+      }
+
+      setLoading(false);
+      Alert.alert('Success', 'Booking submitted successfully!', [
+        { text: 'View History', onPress: () => navigation.navigate('MyReservationHistory') }
+      ]);
     } catch (error) {
       console.error('Booking error:', error);
-      Alert.alert('Error', error.message || 'Failed to submit booking. Please try again.');
-    } finally {
+      Alert.alert('Error', 'Failed to create booking: ' + error.message);
       setLoading(false);
     }
   };
 
-  const renderFacilitySelection = () => (
+  const renderFacilityStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Select Facility</Text>
+      <Text style={styles.sectionHeader}>Choose Facility</Text>
       {loadingFacilities ? (
-        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 20 }} />
-      ) : facilities.length === 0 ? (
-        <View>
-          <Text style={styles.emptyText}>No facilities available</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={loadFacilities}
-          >
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
+        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 50 }} />
       ) : (
-        facilities.map(facility => (
-          <TouchableOpacity
-            key={facility.id}
-            style={styles.facilityCard}
-            onPress={() => selectFacility(facility)}
-          >
-            <Text style={styles.facilityName}>{facility.name}</Text>
-            <Text style={styles.facilityPrice}>Rp {facility.pricePerHour?.toLocaleString() || 0}/hour</Text>
-            <Text style={styles.facilityType}>{facility.courts?.length || 0} {facility.type}s available</Text>
-          </TouchableOpacity>
-        ))
+        <View style={styles.facilityGrid}>
+          {facilities.map((facility) => (
+            <TouchableOpacity 
+              key={facility.id} 
+              style={styles.facilityCard}
+              onPress={() => selectFacility(facility)}
+              activeOpacity={0.9}
+            >
+              <LinearGradient
+                colors={['#2A2A2A', '#0F0F0F']}
+                style={styles.facilityGradient}
+              >
+                <View style={styles.facilityIconCircle}>
+                  <Ionicons name="tennisball" size={24} color={theme.colors.primary} />
+                </View>
+                <Text style={styles.facilityNameText}>{facility.name}</Text>
+                <Text style={styles.facilityPriceText}>From {facility.pricePerHour / 1000}k/hr</Text>
+                <Ionicons name="chevron-forward-circle" size={24} color="rgba(255,255,255,0.1)" style={styles.facilityArrow} />
+              </LinearGradient>
+            </TouchableOpacity>
+          ))}
+        </View>
       )}
     </View>
   );
 
-  const renderCourtAndTimeSelection = () => (
+  const renderSlotStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>{selectedFacility.name}</Text>
-      <Text style={styles.subtitle}>Select Court & Time Slots</Text>
+      {/* Date Picker */}
+      <Text style={styles.sectionHeader}>Select Date</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateScroll}>
+        {dateOptions.map((date) => (
+          <TouchableOpacity 
+            key={date.fullDate} 
+            style={[
+              styles.dateCard,
+              selectedDate === date.fullDate && styles.dateCardActive
+            ]}
+            onPress={() => setSelectedDate(date.fullDate)}
+          >
+            <Text style={[styles.dayName, selectedDate === date.fullDate && styles.dateTextActive]}>{date.dayName}</Text>
+            <Text style={[styles.dayDate, selectedDate === date.fullDate && styles.dateTextActive]}>{date.dayDate}</Text>
+            <Text style={[styles.monthName, selectedDate === date.fullDate && styles.dateTextActive]}>{date.monthName}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
       {/* Court Selection */}
-      <Text style={styles.sectionLabel}>Choose Court:</Text>
+      <Text style={[styles.sectionHeader, { marginTop: 25 }]}>Select Court</Text>
       <View style={styles.courtGrid}>
-        {selectedFacility.courts.map(court => (
-          <TouchableOpacity
-            key={court.id}
+        {selectedFacility?.courts?.map((court) => (
+          <TouchableOpacity 
+            key={court.id} 
             style={[
-              styles.courtCard,
-              selectedCourt?.id === court.id && styles.selectedCourtCard
+              styles.courtBtn,
+              selectedCourt?.id === court.id && styles.courtBtnActive
             ]}
             onPress={() => selectCourt(court)}
           >
-            <Text style={[
-              styles.courtName,
-              selectedCourt?.id === court.id && styles.selectedCourtName
-            ]}>
+            <Text style={[styles.courtBtnText, selectedCourt?.id === court.id && styles.courtBtnTextActive]}>
               {court.name}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Date Selection */}
+      {/* Time Slots */}
       {selectedCourt && (
-        <>
-          <Text style={styles.sectionLabel}>Date:</Text>
-          <View style={styles.dateContainer}>
-            <Text style={styles.dateText}>{selectedDate}</Text>
-          </View>
-
-          {/* Time Slots */}
-          <Text style={styles.sectionLabel}>Available Time Slots:</Text>
-
-          {/* Legend */}
-          <View style={styles.legendContainer}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendBox, styles.legendAvailable]} />
-              <Text style={styles.legendText}>Available</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendBox, styles.legendSelected]} />
-              <Text style={styles.legendText}>Selected</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendBox, styles.legendBooked]} />
-              <Text style={styles.legendText}>Booked</Text>
-            </View>
-          </View>
-
+        <View style={{ marginTop: 25 }}>
+          <Text style={styles.sectionHeader}>Available Slots</Text>
           {loadingSlots ? (
-            <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 20 }} />
-          ) : availableSlots.length === 0 ? (
-            <Text style={styles.emptyText}>No time slots available</Text>
+            <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginTop: 20 }} />
           ) : (
-            <View style={styles.timeGrid}>
-              {availableSlots.map(slotObj => (
-                <TouchableOpacity
-                  key={slotObj.hour}
-                  style={[
-                    styles.timeSlot,
-                    selectedSlots.includes(slotObj.hour) && styles.selectedTimeSlot,
-                    !slotObj.isAvailable && styles.bookedTimeSlot
-                  ]}
-                  onPress={() => toggleTimeSlot(slotObj)}
-                  disabled={!slotObj.isAvailable}
-                  activeOpacity={slotObj.isAvailable ? 0.7 : 1}
-                >
-                  <Text style={[
-                    styles.timeSlotText,
-                    selectedSlots.includes(slotObj.hour) && styles.selectedTimeSlotText,
-                    !slotObj.isAvailable && styles.bookedTimeSlotText
-                  ]}>
-                    {slotObj.hour}:00
-                  </Text>
-                  {!slotObj.isAvailable && (
-                    <Text style={styles.bookedLabel}>Booked</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
+            <View style={styles.slotGrid}>
+              {availableSlots.map((slotObj) => {
+                const isSelected = selectedSlots.includes(slotObj.hour);
+                const isDisabled = !slotObj.isAvailable || slotObj.isPassed;
+                return (
+                  <TouchableOpacity 
+                    key={slotObj.hour} 
+                    style={[
+                      styles.slotBtn,
+                      isSelected && styles.slotBtnActive,
+                      slotObj.isBooked && styles.slotBtnBooked,
+                      isDisabled && styles.slotBtnDisabled
+                    ]}
+                    onPress={() => toggleTimeSlot(slotObj)}
+                    disabled={isDisabled}
+                  >
+                    <Text style={[
+                      styles.slotBtnText,
+                      isSelected && styles.slotBtnTextActive,
+                      (isDisabled) && styles.slotBtnTextDisabled
+                    ]}>
+                      {slotObj.hour}:00
+                    </Text>
+                    {(slotObj.isPassed || slotObj.isBooked) && (
+                      <Text style={styles.slotHintText}>
+                        {slotObj.isPassed ? 'Passed' : 'Booked'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
+        </View>
+      )}
 
-          {/* Booking Summary */}
-          {selectedSlots.length > 0 && (
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Booking Summary</Text>
-              <Text style={styles.summaryText}>Court: {selectedCourt.name}</Text>
-              <Text style={styles.summaryText}>Date: {selectedDate}</Text>
-              <Text style={styles.summaryText}>Time: {selectedSlots.sort((a, b) => a - b).map(h => `${h}:00`).join(', ')}</Text>
-              <Text style={styles.summaryStaffText}>
-                Staff Jaga: {selectedSlots.map(h => staffMap[h]?.employeeName || 'Pending').filter((v, i, a) => a.indexOf(v) === i).join(', ')}
-              </Text>
-              <Text style={styles.summaryText}>Duration: {selectedSlots.length} hour(s)</Text>
-              <View style={styles.divider} />
-              <Text style={styles.summaryText}>Total: Rp {calculateTotal().total.toLocaleString()}</Text>
-              <Text style={styles.summaryTextHighlight}>DP Required: Rp {calculateTotal().dp.toLocaleString()}</Text>
-
-              <TouchableOpacity
-                style={styles.continueButton}
-                onPress={() => setStep(3)}
-              >
-                <Text style={styles.continueButtonText}>Continue to Payment</Text>
-              </TouchableOpacity>
+      {/* Staff on duty summary (from Employee Management schedules) */}
+      {selectedCourt && !loadingSlots && (
+        <View style={{ marginTop: 18 }}>
+          <Text style={styles.sectionHeader}>Staff On Duty</Text>
+          {selectedSlots.length === 0 ? (
+            <Text style={styles.staffEmptyText}>Pilih jam dulu untuk melihat petugas jaga.</Text>
+          ) : (
+            <View style={styles.staffPillsWrap}>
+              {selectedSlots.map((h) => {
+                const staff = staffMap[h];
+                return (
+                  <View key={h} style={[styles.staffPill, !staff && styles.staffPillMissing]}>
+                    <Ionicons name="person-circle-outline" size={18} color={staff ? theme.colors.primary : 'rgba(255,255,255,0.35)'} />
+                    <Text style={styles.staffPillText} numberOfLines={1}>
+                      {h}:00 • {staff?.name || staff?.employeeName || 'Belum ada jadwal'}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
           )}
-        </>
+        </View>
+      )}
+
+      {selectedSlots.length > 0 && (
+        <TouchableOpacity 
+          style={styles.primaryBtn} 
+          onPress={() => setStep(3)}
+        >
+          <LinearGradient colors={theme.gradients.primary} style={styles.primaryBtnGradient}>
+            <Text style={styles.primaryBtnText}>Proceed to Payment</Text>
+            <Ionicons name="arrow-forward" size={20} color="white" />
+          </LinearGradient>
+        </TouchableOpacity>
       )}
     </View>
   );
 
-  const renderPayment = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Payment</Text>
-
-      <View style={styles.paymentCard}>
-        <Text style={styles.paymentTitle}>Down Payment Required</Text>
-        <Text style={styles.paymentAmount}>Rp {calculateTotal().dp.toLocaleString()}</Text>
-
-        <View style={styles.qrisContainer}>
-          <Text style={styles.qrisTitle}>Scan QRIS Code</Text>
-          <Image
-            source={require('../../../assets/images/qris.jpg')}
-            style={styles.qrisImage}
-            resizeMode="contain"
-          />
+  const renderPaymentStep = () => {
+    const { total, dp, remaining } = calculateTotal();
+    return (
+      <View style={styles.stepContainer}>
+        <View style={styles.summaryCard}>
+          <LinearGradient colors={['#2A2A2A', '#1A1A1A']} style={styles.summaryGradient}>
+            <Text style={styles.summaryTitle}>Booking Summary</Text>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Facility</Text>
+              <Text style={styles.summaryValue}>{selectedFacility.name} - {selectedCourt.name}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Date</Text>
+              <Text style={styles.summaryValue}>{selectedDate}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Time</Text>
+              <Text style={styles.summaryValue}>{selectedSlots.map(s => `${s}:00`).join(', ')}</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Total Amount</Text>
+              <Text style={styles.totalPrice}>Rp {total.toLocaleString('id-ID')}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Down Payment ({selectedFacility.dpPercentage}%)</Text>
+              <Text style={styles.dpPrice}>Rp {dp.toLocaleString('id-ID')}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Remaining Payment</Text>
+              <Text style={styles.remainingPrice}>Rp {remaining.toLocaleString('id-ID')}</Text>
+            </View>
+          </LinearGradient>
         </View>
 
-        <Text style={styles.uploadTitle}>Upload Payment Proof</Text>
-        <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
-          <Text style={styles.uploadButtonText}>
-            {paymentProof ? 'Change Image' : 'Select Image'}
-          </Text>
+        <Text style={[styles.sectionHeader, { marginTop: 25 }]}>Upload Payment Proof</Text>
+        <TouchableOpacity style={styles.uploadArea} onPress={pickImage} activeOpacity={0.8}>
+          {paymentProof ? (
+            <Image source={{ uri: paymentProof.uri }} style={styles.uploadedImg} />
+          ) : (
+            <View style={styles.uploadPlaceholder}>
+              <Ionicons name="cloud-upload-outline" size={40} color={theme.colors.primary} />
+              <Text style={styles.uploadMainText}>Tap to upload proof</Text>
+              <Text style={styles.uploadSubText}>JPEG or PNG (Max 5MB)</Text>
+            </View>
+          )}
         </TouchableOpacity>
 
-        {paymentProof && (
-          <Image source={{ uri: paymentProof.uri }} style={styles.proofImage} />
-        )}
-
-        <TouchableOpacity
-          style={[styles.submitButton, (!paymentProof || loading) && styles.disabledButton]}
+        <TouchableOpacity 
+          style={styles.primaryBtn} 
           onPress={submitBooking}
-          disabled={!paymentProof || loading}
+          disabled={loading}
         >
-          {loading ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text style={styles.submitButtonText}>Submit Booking</Text>
-          )}
+          <LinearGradient colors={loading ? ['#333', '#222'] : theme.gradients.primary} style={styles.primaryBtnGradient}>
+            {loading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <>
+                <Text style={styles.primaryBtnText}>Confirm Booking</Text>
+                <Ionicons name="checkmark-done" size={22} color="white" />
+              </>
+            )}
+          </LinearGradient>
         </TouchableOpacity>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
-    <ScrollView style={styles.container}>
-      {!user ? (
-        <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>User not found</Text>
-        </View>
-      ) : (
-        <>
-          {step === 1 && renderFacilitySelection()}
-          {step === 2 && renderCourtAndTimeSelection()}
-          {step === 3 && renderPayment()}
+    <View style={styles.container}>
+      <StatusBar style="light" />
+      <LinearGradient colors={[theme.colors.background, '#000000']} style={StyleSheet.absoluteFill} />
+      
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => step === 1 ? navigation.goBack() : setStep(step - 1)}>
+          <Ionicons name="arrow-back" size={24} color="white" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Reserve Field</Text>
+      </View>
 
-          {step > 1 && (
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => setStep(step - 1)}
-            >
-              <Text style={styles.backButtonText}>Back</Text>
-            </TouchableOpacity>
-          )}
-        </>
-      )}
-    </ScrollView>
+      {/* Step Indicators */}
+      <View style={styles.stepIndicator}>
+        {[1, 2, 3].map((s) => (
+          <View key={s} style={styles.indicatorWrapper}>
+            <View style={[styles.indicatorCircle, step >= s && styles.indicatorCircleActive]}>
+              <Text style={[styles.indicatorText, step >= s && styles.indicatorTextActive]}>{s}</Text>
+            </View>
+            {s < 3 && <View style={[styles.indicatorLine, step > s && styles.indicatorLineActive]} />}
+          </View>
+        ))}
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {step === 1 && renderFacilityStep()}
+        {step === 2 && renderSlotStep()}
+        {step === 3 && renderPaymentStep()}
+      </ScrollView>
+    </View>
   );
 };
 
@@ -462,330 +556,366 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  centerContainer: {
-    flex: 1,
+  header: {
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: theme.spacing.xlarge,
-  },
-  errorText: {
-    fontSize: 18,
-    color: theme.colors.error,
-    textAlign: 'center',
-  },
-  stepContainer: {
-    padding: theme.spacing.medium,
-  },
-  stepTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: theme.spacing.medium,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.medium,
-  },
-  facilityCard: {
-    backgroundColor: theme.colors.cardBackground,
-    padding: theme.spacing.medium,
-    borderRadius: theme.borderRadius.medium,
-    marginBottom: theme.spacing.small,
+    marginRight: 15,
     borderWidth: 1,
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.glassBorder,
   },
-  facilityName: {
-    fontSize: 18,
+  headerTitle: {
+    color: 'white',
+    fontSize: 20,
     fontWeight: 'bold',
-    color: theme.colors.text,
   },
-  facilityPrice: {
-    fontSize: 16,
-    color: theme.colors.primary,
-    marginTop: 4,
-  },
-  facilityType: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    marginTop: 4,
-  },
-  courtGrid: {
+  stepIndicator: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: theme.spacing.medium,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginBottom: 10,
   },
-  courtCard: {
-    backgroundColor: theme.colors.cardBackground,
-    padding: theme.spacing.medium,
-    borderRadius: theme.borderRadius.medium,
-    flex: 1,
-    minWidth: '45%',
-    borderWidth: 2,
-    borderColor: theme.colors.inputBorder,
-  },
-  selectedCourtCard: {
-    borderColor: theme.colors.primary,
-    backgroundColor: 'rgba(255, 0, 0, 0.1)',
-  },
-  courtName: {
-    fontSize: 16,
-    color: theme.colors.text,
-    textAlign: 'center',
-  },
-  selectedCourtName: {
-    color: theme.colors.primary,
-    fontWeight: 'bold',
-  },
-  sectionLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-    marginTop: theme.spacing.medium,
-    marginBottom: theme.spacing.small,
-  },
-  dateContainer: {
-    backgroundColor: theme.colors.cardBackground,
-    padding: theme.spacing.medium,
-    borderRadius: theme.borderRadius.medium,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-    marginBottom: theme.spacing.small,
-  },
-  dateText: {
-    fontSize: 16,
-    color: theme.colors.text,
-    textAlign: 'center',
-  },
-  legendContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: theme.spacing.medium,
-    paddingVertical: theme.spacing.small,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: theme.borderRadius.small,
-  },
-  legendItem: {
+  indicatorWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  legendBox: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
-    marginRight: 6,
+  indicatorCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: theme.colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
   },
-  legendAvailable: {
-    backgroundColor: theme.colors.cardBackground,
-    borderColor: theme.colors.inputBorder,
-  },
-  legendSelected: {
+  indicatorCircleActive: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
   },
-  legendBooked: {
-    backgroundColor: '#1a1a1a',
-    borderColor: '#444',
-    opacity: 0.5,
-  },
-  legendText: {
-    fontSize: 12,
+  indicatorText: {
     color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: 'bold',
   },
-  timeGrid: {
+  indicatorTextActive: {
+    color: 'white',
+  },
+  indicatorLine: {
+    width: 40,
+    height: 2,
+    backgroundColor: theme.colors.surface,
+    marginHorizontal: 10,
+  },
+  indicatorLineActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  scrollContent: {
+    padding: 25,
+    paddingTop: 10,
+  },
+  stepContainer: {
+    flex: 1,
+  },
+  sectionHeader: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 20,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+  facilityGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-  timeSlot: {
-    width: '22%',
-    backgroundColor: theme.colors.cardBackground,
-    padding: theme.spacing.small,
-    borderRadius: theme.borderRadius.small,
-    marginBottom: theme.spacing.small,
-    borderWidth: 1,
-    borderColor: theme.colors.inputBorder,
-    minHeight: 50,
+  facilityCard: {
+    width: (width - 65) / 2,
+    height: 160,
+    borderRadius: theme.borderRadius.large,
+    overflow: 'hidden',
+    marginBottom: 15,
+    ...theme.shadows.medium,
+  },
+  facilityGradient: {
+    flex: 1,
+    padding: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  selectedTimeSlot: {
+  facilityIconCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  facilityNameText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  facilityPriceText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+  },
+  facilityArrow: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+  },
+  dateScroll: {
+    paddingBottom: 10,
+  },
+  dateCard: {
+    width: 70,
+    height: 90,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.medium,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+  },
+  dateCardActive: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
   },
-  bookedTimeSlot: {
-    backgroundColor: '#1a1a1a',
-    borderColor: '#444',
-    opacity: 0.5,
-  },
-  timeSlotText: {
-    color: theme.colors.text,
-    textAlign: 'center',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  selectedTimeSlotText: {
-    color: theme.colors.buttonText,
-  },
-  bookedTimeSlotText: {
-    color: '#666',
-    textDecorationLine: 'line-through',
-  },
-  bookedLabel: {
+  dayName: {
+    color: theme.colors.textSecondary,
     fontSize: 10,
-    color: '#888',
-    marginTop: 2,
-    fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
-  summaryCard: {
-    backgroundColor: theme.colors.cardBackground,
-    padding: theme.spacing.medium,
-    borderRadius: theme.borderRadius.medium,
-    marginTop: theme.spacing.medium,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: theme.spacing.small,
-  },
-  summaryText: {
-    fontSize: 16,
-    color: theme.colors.text,
-    marginBottom: 4,
-  },
-  summaryTextHighlight: {
-    fontSize: 18,
-    color: theme.colors.primary,
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
-  summaryStaffText: {
-    fontSize: 14,
-    color: '#FFD700', // Gold color for staff info
+  dayDate: {
+    color: 'white',
+    fontSize: 24,
     fontWeight: 'bold',
     marginVertical: 4,
   },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    marginVertical: theme.spacing.small,
+  monthName: {
+    color: theme.colors.textSecondary,
+    fontSize: 10,
   },
-  continueButton: {
-    backgroundColor: theme.colors.primary,
-    padding: theme.spacing.medium,
+  dateTextActive: {
+    color: 'white',
+  },
+  courtGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  courtBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     borderRadius: theme.borderRadius.medium,
-    marginTop: theme.spacing.medium,
-  },
-  continueButtonText: {
-    color: theme.colors.buttonText,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  paymentCard: {
-    backgroundColor: theme.colors.cardBackground,
-    padding: theme.spacing.medium,
-    borderRadius: theme.borderRadius.medium,
+    backgroundColor: theme.colors.surface,
+    marginRight: 10,
+    marginBottom: 10,
     borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+  },
+  courtBtnActive: {
+    backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
   },
-  paymentTitle: {
+  courtBtnText: {
+    color: theme.colors.textSecondary,
+    fontWeight: '600',
+  },
+  courtBtnTextActive: {
+    color: 'white',
+  },
+  slotGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  slotBtn: {
+    width: (width - 70) / 4,
+    height: 58,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.small,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+  },
+  slotBtnActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  slotBtnDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  slotBtnBooked: {
+    backgroundColor: 'rgba(255, 59, 48, 0.08)',
+    borderColor: 'rgba(255, 59, 48, 0.25)',
+  },
+  slotBtnText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  slotBtnTextActive: {
+    color: 'white',
+  },
+  slotBtnTextDisabled: {
+    color: 'rgba(255,255,255,0.1)',
+  },
+  slotHintText: {
+    marginTop: 4,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    color: 'rgba(255,255,255,0.35)',
+    textTransform: 'uppercase',
+  },
+  primaryBtn: {
+    marginTop: 30,
+    borderRadius: theme.borderRadius.medium,
+    overflow: 'hidden',
+    ...theme.shadows.medium,
+  },
+  primaryBtnGradient: {
+    height: 55,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  primaryBtnText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginRight: 10,
+  },
+  summaryCard: {
+    borderRadius: theme.borderRadius.large,
+    overflow: 'hidden',
+    ...theme.shadows.heavy,
+  },
+  summaryGradient: {
+    padding: 24,
+  },
+  summaryTitle: {
+    color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
-    color: theme.colors.text,
-    textAlign: 'center',
+    marginBottom: 15,
   },
-  paymentAmount: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: theme.colors.primary,
-    textAlign: 'center',
-    marginVertical: theme.spacing.small,
+  summaryDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginVertical: 15,
   },
-  qrisContainer: {
-    alignItems: 'center',
-    marginVertical: theme.spacing.medium,
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  qrisTitle: {
-    fontSize: 16,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.small,
-  },
-  qrisImage: {
-    width: 200,
-    height: 200,
-    borderRadius: theme.borderRadius.small,
-  },
-  uploadTitle: {
-    fontSize: 16,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.small,
-  },
-  uploadButton: {
-    backgroundColor: theme.colors.secondary,
-    padding: theme.spacing.medium,
-    borderRadius: theme.borderRadius.medium,
-    marginBottom: theme.spacing.small,
-  },
-  uploadButtonText: {
-    color: theme.colors.text,
-    textAlign: 'center',
-    fontSize: 16,
-  },
-  proofImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: theme.borderRadius.small,
-    marginBottom: theme.spacing.medium,
-  },
-  submitButton: {
-    backgroundColor: theme.colors.primary,
-    padding: theme.spacing.medium,
-    borderRadius: theme.borderRadius.medium,
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    color: theme.colors.buttonText,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  backButton: {
-    backgroundColor: theme.colors.secondary,
-    padding: theme.spacing.medium,
-    borderRadius: theme.borderRadius.medium,
-    margin: theme.spacing.medium,
-  },
-  backButtonText: {
-    color: theme.colors.text,
-    textAlign: 'center',
-    fontSize: 16,
-  },
-  emptyText: {
-    fontSize: 16,
+  summaryLabel: {
     color: theme.colors.textSecondary,
-    textAlign: 'center',
-    marginTop: theme.spacing.large,
+    fontSize: 14,
   },
-  retryButton: {
-    backgroundColor: theme.colors.primary,
-    padding: theme.spacing.medium,
-    borderRadius: theme.borderRadius.medium,
-    marginTop: theme.spacing.medium,
-    alignSelf: 'center',
-    paddingHorizontal: theme.spacing.xlarge,
+  summaryValue: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 10,
   },
-  retryButtonText: {
-    color: theme.colors.buttonText,
+  totalPrice: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  dpPrice: {
+    color: theme.colors.primary,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  remainingPrice: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  staffEmptyText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    marginTop: -8,
+    marginBottom: 8,
+  },
+  staffPillsWrap: {
+    gap: 10,
+  },
+  staffPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  staffPillMissing: {
+    backgroundColor: 'rgba(255, 149, 0, 0.06)',
+    borderColor: 'rgba(255, 149, 0, 0.18)',
+  },
+  staffPillText: {
+    flex: 1,
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  uploadArea: {
+    height: 200,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.large,
+    borderStyle: 'dashed',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.1)',
+    overflow: 'hidden',
+    marginBottom: 30,
+  },
+  uploadPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadMainText: {
+    color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+    marginTop: 15,
+    marginBottom: 5,
+  },
+  uploadSubText: {
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+  },
+  uploadedImg: {
+    width: '100%',
+    height: '100%',
   },
 });
 

@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import { theme } from '../../styles/theme';
-import { collection, addDoc, doc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../../config/firebase';
+import { attendanceAPI, getCurrentUserData } from '../../api/attendance';
+import { CloudinaryService } from '../../services/CloudinaryService';
 
 const { width } = Dimensions.get('window');
 
@@ -18,34 +19,65 @@ export default function AttendanceScreen() {
   const [distance, setDistance] = useState(null);
   const [isWithinRadius, setIsWithinRadius] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [selfieUri, setSelfieUri] = useState(null);
+  const [selfieUploading, setSelfieUploading] = useState(false);
 
   // Animation values
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
 
-  // Fetch attendance settings from Firebase
+  // Fetch attendance settings from API
   useEffect(() => {
     const fetchAttendanceSettings = async () => {
       try {
-        const settingsDoc = await getDoc(doc(db, 'settings', 'attendance'));
-        if (settingsDoc.exists()) {
-          const settings = settingsDoc.data();
-          setAttendanceSettings(settings);
-          console.log('Attendance settings loaded:', settings);
+        const response = await attendanceAPI.getSettings();
+        
+        if (response.success && response.data) {
+          setAttendanceSettings(response.data);
+          console.log('Attendance settings loaded:', response.data);
         } else {
           console.log('No attendance settings found');
           Alert.alert('Error', 'Pengaturan lokasi absensi belum diatur di website admin');
         }
       } catch (error) {
         console.error('Error fetching attendance settings:', error);
-        Alert.alert('Error', 'Gagal mengambil pengaturan lokasi');
+        
+        if (error.message.includes('Network request failed')) {
+          Alert.alert(
+            'Koneksi Error',
+            'Tidak dapat terhubung ke server. Pastikan:\n1. WiFi/Internet aktif\n2. Server berjalan di IP yang benar\n3. Firewall tidak memblokir koneksi',
+            [{ text: 'OK' }]
+          );
+        } else {
+          Alert.alert('Error', 'Gagal mengambil pengaturan lokasi: ' + error.message);
+        }
       } finally {
         setLoading(false);
       }
     };
 
+    const checkHistory = async () => {
+      try {
+        const userData = await getCurrentUserData();
+        if (userData) {
+          const res = await attendanceAPI.getHistory(userData, 1, 0);
+          if (res.success && res.data && res.data.length > 0) {
+            const lastRecord = res.data[0];
+            const today = new Date().toISOString().split('T')[0];
+            if (lastRecord.date === today) {
+              setIsAttended(true);
+              setAttendanceTime(lastRecord.check_in);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Check history err", e);
+      }
+    };
+
     fetchAttendanceSettings();
+    checkHistory();
   }, []);
 
   // Check location permissions and get current location
@@ -66,44 +98,92 @@ export default function AttendanceScreen() {
 
         setLocationStatus('granted');
 
-        // Get current location
+        // Get current location with better settings
         const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.BestForNavigation,
+          accuracy: Location.Accuracy.High,
+          maximumAge: 10000, // Accept location up to 10 seconds old
+          timeout: 15000, // 15 seconds timeout
         });
 
         setCurrentLocation({
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
+          isMocked: location.mocked || false,
         });
+
+        if (location.mocked) {
+          Alert.alert(
+            'Peringatan Keamanan', 
+            'Terdeteksi penggunaan Fake GPS! Status absen Anda akan tercatat sebagai Fake GPS.'
+          );
+        }
 
         console.log('Current location:', location.coords);
 
       } catch (error) {
         console.error('Error getting location:', error);
         setLocationStatus('error');
-        Alert.alert('Error', 'Gagal mendapatkan lokasi. Pastikan GPS aktif.');
+        
+        // More specific error handling
+        if (error.message.includes('Location services are disabled')) {
+          Alert.alert(
+            'GPS Tidak Aktif',
+            'GPS tidak aktif. Silakan aktifkan GPS di pengaturan perangkat.',
+            [{ text: 'OK' }]
+          );
+        } else if (error.message.includes('Location request timed out')) {
+          Alert.alert(
+            'Timeout',
+            'Gagal mendapatkan lokasi dalam waktu yang ditentukan. Silakan coba lagi.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          Alert.alert(
+            'Error',
+            'Gagal mendapatkan lokasi. Pastikan GPS aktif dan sinyal baik.',
+            [{ text: 'OK' }]
+          );
+        }
       }
     };
 
     checkLocationPermissions();
   }, []);
 
-  // Calculate distance and check if within radius
+  // Calculate distance and check if within radius using API
   useEffect(() => {
-    if (currentLocation && attendanceSettings) {
-      const calculatedDistance = calculateDistance(
-        currentLocation.latitude,
-        currentLocation.longitude,
-        attendanceSettings.latitude,
-        attendanceSettings.longitude
-      );
+    const checkRadiusWithAPI = async () => {
+      if (currentLocation && attendanceSettings) {
+        try {
+          const response = await attendanceAPI.checkRadius(
+            currentLocation.latitude,
+            currentLocation.longitude
+          );
 
-      setDistance(calculatedDistance);
-      setIsWithinRadius(calculatedDistance <= attendanceSettings.radius);
+          if (response.success && response.data) {
+            setDistance(response.data.distance);
+            setIsWithinRadius(response.data.within_radius);
 
-      console.log('Distance:', calculatedDistance, 'meters');
-      console.log('Within radius:', calculatedDistance <= attendanceSettings.radius);
-    }
+            console.log('Distance:', response.data.distance, 'meters');
+            console.log('Within radius:', response.data.within_radius);
+          }
+        } catch (error) {
+          console.error('Error checking radius:', error);
+          // Fallback to local calculation
+          const calculatedDistance = calculateDistance(
+            currentLocation.latitude,
+            currentLocation.longitude,
+            attendanceSettings.latitude,
+            attendanceSettings.longitude
+          );
+
+          setDistance(calculatedDistance);
+          setIsWithinRadius(calculatedDistance <= attendanceSettings.radius_meters);
+        }
+      }
+    };
+
+    checkRadiusWithAPI();
   }, [currentLocation, attendanceSettings]);
 
   // Haversine formula to calculate distance between two points
@@ -151,7 +231,7 @@ export default function AttendanceScreen() {
     if (!isWithinRadius) {
       Alert.alert(
         'Lokasi Tidak Valid',
-        `Anda berada di luar radius absensi. Jarak Anda: ${Math.round(distance)}m (Max: ${attendanceSettings.radius}m). \n\nSilakan mendekat ke lokasi yang telah ditentukan.`,
+        `Anda berada di luar radius absensi. Jarak Anda: ${Math.round(distance)}m (Max: ${attendanceSettings.radius_meters}m). \n\nSilakan mendekat ke lokasi yang telah ditentukan.`,
         [{ text: 'OK' }]
       );
       return;
@@ -167,76 +247,84 @@ export default function AttendanceScreen() {
       return;
     }
 
-    // Scale down animation
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.9,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.parallel([
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 3,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-        Animated.timing(rotateAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
-
-    // Set attended
-    setIsAttended(true);
-    const now = new Date();
-    setAttendanceTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-
-    // Here you would save attendance to Firebase
+    // Save attendance to API first before rendering animation
     try {
-      if (!auth.currentUser) {
-        throw new Error('User not authenticated');
+      const userData = await getCurrentUserData();
+      
+      if (!userData) {
+        throw new Error('User data not found');
       }
 
-      const userUid = auth.currentUser.uid;
-      const userEmail = auth.currentUser.email || '';
+      if (!selfieUri) {
+        Alert.alert('Selfie Wajib', 'Ambil selfie dulu (ikon kamera) sebelum absen.');
+        return;
+      }
 
-      const userDoc = await getDoc(doc(db, 'users', userUid));
-      const userData = userDoc.exists() ? userDoc.data() : {};
+      const locationData = {
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+        is_mocked: currentLocation.isMocked === true,
+      };
 
-      const employeeName = userData?.name || 'Unknown';
-      const employeeId = userData?.employeeId || userUid;
+      // Handle Mock Location Fake GPS
+      if (currentLocation.isMocked) {
+        locationData.status = 'fake gps';
+      }
 
-      const dateStr = now.toISOString().split('T')[0];
-      const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-      await addDoc(collection(db, 'attendances'), {
-        employeeId,
-        employeeUid: userUid,
-        employeeName,
-        employeeEmail: userEmail,
-        date: dateStr,
-        checkIn: timeStr,
-        checkOut: null,
-        status: 'hadir',
-        location: currentLocation
-          ? {
-            latitude: currentLocation.latitude,
-            longitude: currentLocation.longitude,
-          }
-          : null,
-        distanceMeters: typeof distance === 'number' ? distance : null,
-        radiusMeters: attendanceSettings?.radius ?? null,
-        locationName: attendanceSettings?.locationName ?? null,
-        createdAt: serverTimestamp(),
+      // Upload selfie to Cloudinary (preferred)
+      setSelfieUploading(true);
+      const selfieUrl = await CloudinaryService.uploadImage(selfieUri, {
+        folder: 'gsc/attendance-selfies',
+        filenamePrefix: 'attendance-selfie',
       });
+      locationData.selfie_url = selfieUrl;
 
-      console.log('Attendance recorded successfully');
+      const response = await attendanceAPI.saveAttendance(userData, locationData);
+
+      if (response.success) {
+        // Set attended locally
+        setIsAttended(true);
+        setSelfieUri(null);
+        const now = new Date();
+        setAttendanceTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+        // Scale down animation
+        Animated.sequence([
+          Animated.timing(scaleAnim, {
+            toValue: 0.9,
+            duration: 100,
+            useNativeDriver: true,
+          }),
+          Animated.parallel([
+            Animated.spring(scaleAnim, {
+              toValue: 1,
+              friction: 3,
+              tension: 40,
+              useNativeDriver: true,
+            }),
+            Animated.timing(rotateAnim, {
+              toValue: 1,
+              duration: 500,
+              useNativeDriver: true,
+            }),
+          ]),
+        ]).start();
+
+        console.log('Attendance recorded successfully:', response.data);
+      } else {
+        // Handle explicit server failures cleanly without throwing an exception
+        Alert.alert('Informasi', response.message || 'Gagal memproses absensi.');
+        
+        // Auto-sync UI if server says they already checked in independently of frontend state
+        if (response.message && response.message.toLowerCase().includes('sudah melakukan check-in')) {
+          setIsAttended(true);
+        }
+      }
     } catch (error) {
       console.error('Error saving attendance:', error);
-      Alert.alert('Error', 'Absensi berhasil tapi gagal menyimpan data ke database. Coba lagi.');
+      Alert.alert('Koneksi Gagal', 'Gagal menyambung ke server. ' + (error.message || 'Terjadi kesalahan sistem.'));
+    } finally {
+      setSelfieUploading(false);
     }
   };
 
@@ -258,13 +346,50 @@ export default function AttendanceScreen() {
       setCurrentLocation({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
+        isMocked: location.mocked || false,
       });
+
+      if (location.mocked) {
+        Alert.alert(
+          'Peringatan Keamanan',
+          'Terdeteksi penggunaan Fake GPS! Status absen Anda akan tercatat sebagai Fake GPS.'
+        );
+      }
 
       Alert.alert('Success', 'Lokasi berhasil diperbarui!');
     } catch (error) {
       Alert.alert('Error', 'Gagal memperbarui lokasi');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTakeSelfie = async () => {
+    try {
+      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+      if (cameraStatus !== 'granted') {
+        Alert.alert('Akses Ditolak', 'Akses kamera dibutuhkan untuk mengambil selfie absensi.');
+        return;
+      }
+
+      const imageResult = await ImagePicker.launchCameraAsync({
+        cameraType: ImagePicker.CameraType.front,
+        allowsEditing: true,
+        aspect: [3, 4],
+        quality: 0.5,
+      });
+
+      if (imageResult.canceled) return;
+
+      const uri = imageResult.assets?.[0]?.uri;
+      if (!uri) {
+        Alert.alert('Error', 'Gagal mengambil foto.');
+        return;
+      }
+      setSelfieUri(uri);
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Gagal membuka kamera.');
     }
   };
 
@@ -291,7 +416,7 @@ export default function AttendanceScreen() {
         <Text style={styles.headerTitle}>Sistem Absensi GPS</Text>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Location Status Card */}
         <View style={styles.locationCard}>
           <Text style={styles.locationTitle}>Status Lokasi</Text>
@@ -306,7 +431,7 @@ export default function AttendanceScreen() {
               </View>
 
               <Text style={styles.distanceText}>
-                Jarak: {Math.round(distance)}m / {attendanceSettings.radius}m
+                Jarak: {Math.round(distance)}m / {attendanceSettings.radius_meters}m
               </Text>
 
               <Text style={styles.coordsText}>
@@ -314,7 +439,7 @@ export default function AttendanceScreen() {
               </Text>
 
               <Text style={styles.targetText}>
-                Target: {attendanceSettings.locationName}
+                Target: {attendanceSettings.location_name}
               </Text>
             </View>
           ) : (
@@ -359,7 +484,7 @@ export default function AttendanceScreen() {
           >
             <TouchableOpacity
               onPress={handleAttendance}
-              disabled={isAttended || !isWithinRadius}
+              disabled={isAttended || !isWithinRadius || selfieUploading}
               activeOpacity={0.8}
             >
               <LinearGradient
@@ -384,6 +509,30 @@ export default function AttendanceScreen() {
               </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
+
+          {!isAttended && (
+            <View style={styles.selfieRow}>
+              <TouchableOpacity
+                onPress={handleTakeSelfie}
+                disabled={!isWithinRadius || selfieUploading}
+                style={[
+                  styles.selfieButton,
+                  (!isWithinRadius || selfieUploading) && { opacity: 0.6 }
+                ]}
+              >
+                <Ionicons name="camera" size={18} color="white" />
+                <Text style={styles.selfieButtonText}>
+                  {selfieUri ? 'Selfie siap' : 'Ambil selfie'}
+                </Text>
+              </TouchableOpacity>
+              {selfieUploading && (
+                <View style={styles.selfieUploading}>
+                  <ActivityIndicator color="white" />
+                  <Text style={styles.selfieUploadingText}>Upload...</Text>
+                </View>
+              )}
+            </View>
+          )}
 
           {isAttended && (
             <Animated.View style={[styles.successInfo, { opacity: scaleAnim }]}>
@@ -420,12 +569,8 @@ export default function AttendanceScreen() {
           </View>
         </View>
 
-        {isAttended && (
-          <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-            <Text style={styles.resetButtonText}>Reset Absensi</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        {/* isAttended State has no reset button anymore because 1 day = 1 attendance */}
+      </ScrollView>
     </View>
   );
 }
@@ -463,6 +608,11 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 20,
+    paddingBottom: 80,
   },
   locationCard: {
     backgroundColor: theme.colors.cardBackground,
@@ -644,5 +794,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  selfieRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  selfieButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,0,0,0.85)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  selfieButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  selfieUploading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  selfieUploadingText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

@@ -44,20 +44,26 @@ const RatingScreen = ({
       return;
     }
 
+    // Validate booking data
+    if (!booking || !booking.id) {
+      Alert.alert('Error', 'Data booking tidak valid. Silakan coba lagi.');
+      return;
+    }
+
     setLoading(true);
     try {
       const reviewData = {
-        bookingId: booking.id,
-        userId: booking.userId,
-        facilityId: booking.courtId,
-        facilityName: booking.facilityName,
+        bookingId: String(booking.id), // Convert to string for Firestore
+        userId: booking.userId || booking.firebase_uid,
+        facilityId: booking.courtId || booking.facility_id,
+        facilityName: booking.facilityName || booking.facility_name,
         rating,
         staffRating,
         staffOnDutyId: booking.staffOnDutyId || null,
         staffOnDutyName: booking.staffOnDutyName || null,
-        review: review.trim(),
-        userName: booking.userName,
-        bookingDate: booking.date,
+        review: (review && typeof review === 'string') ? review.trim() : '',
+        userName: booking.userName || booking.user_name,
+        bookingDate: booking.date || booking.booking_date,
         ratingType: 'emote_with_staff_star'
       };
 

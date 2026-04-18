@@ -1,19 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Image, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Image, TouchableOpacity, Alert, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { auth } from '../../config/firebase';
 import { BookingService } from '../../services/BookingService';
 import { theme } from '../../styles/theme';
 import RatingScreen from './RatingScreen';
 import CancellationRequestScreen from './CancellationRequestScreen';
 
-export default function MyReservationHistoryScreen() {
+const { width } = Dimensions.get('window');
+
+export default function MyReservationHistoryScreen({ navigation }) {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [showCancellationModal, setShowCancellationModal] = useState(false);
+  const [userId, setUserId] = useState('');
 
   useEffect(() => {
     loadBookings();
@@ -21,24 +26,7 @@ export default function MyReservationHistoryScreen() {
 
   useEffect(() => {
     checkExpiredBookings();
-    checkForCompletedBookings();
   }, [bookings]);
-
-  const checkForCompletedBookings = () => {
-    const completedBookings = bookings.filter(booking =>
-      isBookingCompleted(booking) && !booking.hasRated && !booking.ratingShown
-    );
-
-    if (completedBookings.length > 0) {
-      // Show rating for the most recent completed booking
-      const latestBooking = completedBookings[0];
-      setSelectedBooking(latestBooking);
-      setShowRatingModal(true);
-
-      // Mark as shown to prevent repeated popups
-      markRatingAsShown(latestBooking.id);
-    }
-  };
 
   const markRatingAsShown = async (bookingId) => {
     try {
@@ -61,6 +49,7 @@ export default function MyReservationHistoryScreen() {
     try {
       const userId = auth.currentUser?.uid || auth.currentUser?.email;
       if (userId) {
+        setUserId(userId);
         const userBookings = await BookingService.getUserBookings(userId);
         setBookings(userBookings);
       }
@@ -77,35 +66,48 @@ export default function MyReservationHistoryScreen() {
     loadBookings();
   };
 
-  const getStatusColor = (status) => {
+  const getStatusConfig = (status) => {
     switch (status) {
-      case 'confirmed': return theme.colors.success;
-      case 'pending': return theme.colors.warning;
-      case 'rejected': return theme.colors.error;
-      case 'cancelled': return theme.colors.error;
-      case 'completed': return theme.colors.success;
-      case 'selesai': return theme.colors.success;
-      case 'cancellation_requested': return theme.colors.warning;
-      default: return theme.colors.textSecondary;
+      case 'confirmed': return { color: theme.colors.success, text: 'Confirmed', icon: 'checkmark-circle' };
+      case 'pending': return { color: theme.colors.warning, text: 'Pending', icon: 'time' };
+      case 'rejected': return { color: theme.colors.error, text: 'Rejected', icon: 'close-circle' };
+      case 'cancelled': return { color: theme.colors.error, text: 'Cancelled', icon: 'ban' };
+      case 'completed': 
+      case 'selesai': return { color: theme.colors.success, text: 'Completed', icon: 'ribbon' };
+      case 'cancellation_requested': return { color: theme.colors.warning, text: 'Cancelling...', icon: 'hourglass' };
+      default: return { color: theme.colors.textSecondary, text: status, icon: 'help-circle' };
     }
   };
 
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'pending': return 'Menunggu';
-      case 'confirmed': return 'Dikonfirmasi';
-      case 'rejected': return 'Ditolak';
-      case 'cancelled': return 'Dibatalkan';
-      case 'completed': return 'Selesai';
-      case 'selesai': return 'Selesai';
-      case 'cancellation_requested': return 'Menunggu Pembatalan';
-      default: return status.charAt(0).toUpperCase() + status.slice(1);
-    }
-  };
+  const handleRatingPress = async (booking) => {
+    try {
+      // Enrich booking with staff-on-duty (computed from schedule) so RatingScreen can rate the staff.
+      const facilityName = booking.facilityName || booking.facility_name || '';
+      const bookingDate = booking.date || booking.booking_date || '';
+      const timeSlots = booking.timeSlots || booking.time_slots || [];
+      const firstSlot = Array.isArray(timeSlots) && timeSlots.length > 0 ? Math.min(...timeSlots) : null;
 
-  const handleRatingPress = (booking) => {
-    setSelectedBooking(booking);
-    setShowRatingModal(true);
+      if (facilityName && bookingDate && Number.isInteger(firstSlot)) {
+        // getStaffBySlot(date, hour, facilityName)
+        const staff = await BookingService.getStaffBySlot(bookingDate, firstSlot, facilityName);
+        if (staff) {
+          setSelectedBooking({
+            ...booking,
+            staffOnDutyId: staff.employeeId,
+            staffOnDutyName: staff.employeeName,
+          });
+          setShowRatingModal(true);
+          return;
+        }
+      }
+
+      setSelectedBooking(booking);
+      setShowRatingModal(true);
+    } catch (e) {
+      console.error('Failed to resolve staff on duty:', e);
+      setSelectedBooking(booking);
+      setShowRatingModal(true);
+    }
   };
 
   const handleCancellationPress = (booking) => {
@@ -114,13 +116,14 @@ export default function MyReservationHistoryScreen() {
   };
 
   const handleRatingSubmit = () => {
-    loadBookings();
+    if (selectedBooking) markRatingAsShown(selectedBooking.id);
     setSelectedBooking(null);
     setShowRatingModal(false);
+    loadBookings();
   };
 
   const handleRatingSkip = () => {
-    // User skipped rating, don't show again for this booking
+    if (selectedBooking) markRatingAsShown(selectedBooking.id);
     setSelectedBooking(null);
     setShowRatingModal(false);
   };
@@ -131,170 +134,143 @@ export default function MyReservationHistoryScreen() {
     setShowCancellationModal(false);
   };
 
-  const isBookingCompleted = (booking) => {
-    return booking.status === 'completed' || booking.status === 'selesai';
-  };
-
-  const canRateBooking = (booking) => {
-    return isBookingCompleted(booking) && !booking.hasRated;
-  };
-
-  const shouldShowRatingPrompt = (booking) => {
-    return isBookingCompleted(booking) && !booking.hasRated && !booking.ratingShown;
-  };
-
-  const canCancelBooking = (booking) => {
-    return booking.status === 'confirmed';
-  };
+  const isBookingCompleted = (booking) => booking.status === 'completed' || booking.status === 'selesai';
+  const canRateBooking = (booking) => isBookingCompleted(booking) && (booking.has_rated === 0 || !booking.has_rated);
+  const canCancelBooking = (booking) => booking.status === 'confirmed';
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
+        <StatusBar style="light" />
         <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
 
   return (
-    <>
-      <ScrollView
-        style={styles.container}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Riwayat Reservasi Saya</Text>
-          <Text style={styles.headerSubtitle}>{bookings.length} total reservasi</Text>
+    <View style={styles.container}>
+      <StatusBar style="light" />
+      <LinearGradient colors={[theme.colors.background, '#000000']} style={StyleSheet.absoluteFill} />
+      
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color="white" />
+        </TouchableOpacity>
+        <View>
+          <Text style={styles.headerTitle}>My Bookings</Text>
+          <Text style={styles.headerSubtitle}>{bookings.length} reservations found</Text>
         </View>
+      </View>
 
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
+        showsVerticalScrollIndicator={false}
+      >
         {bookings.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Belum ada reservasi</Text>
-            <Text style={styles.emptySubtext}>Mulai pesan fasilitas olahraga favoritmu!</Text>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="calendar-outline" size={40} color={theme.colors.textTertiary} />
+            </View>
+            <Text style={styles.emptyText}>No Bookings Yet</Text>
+            <Text style={styles.emptySubtext}>Start booking your favorite sports facilities now!</Text>
+            <TouchableOpacity style={styles.emptyButton} onPress={() => navigation.navigate('FieldReservation')}>
+              <Text style={styles.emptyButtonText}>Book a Field</Text>
+            </TouchableOpacity>
           </View>
         ) : (
-          bookings.map((booking) => (
-            <View key={booking.id} style={styles.bookingCard}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.facilityName}>{booking.facilityName}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(booking.status) }]}>
-                  <Text style={styles.statusText}>{getStatusText(booking.status)}</Text>
-                </View>
+          bookings.map((booking) => {
+            const status = getStatusConfig(booking.status);
+            return (
+              <View key={booking.id} style={styles.bookingCard}>
+                <LinearGradient colors={['#2A2A2A', '#1A1A1A']} style={styles.cardGradient}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.facilityInfo}>
+                      <Text style={styles.facilityName}>{booking.facilityName}</Text>
+                      <View style={styles.courtRow}>
+                        <Ionicons name="location-outline" size={12} color={theme.colors.textSecondary} />
+                        <Text style={styles.courtName}>{booking.courtName}</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: `${status.color}20` }]}>
+                      <Ionicons name={status.icon} size={12} color={status.color} />
+                      <Text style={[styles.statusText, { color: status.color }]}>{status.text}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.cardDivider} />
+
+                  <View style={styles.detailsRow}>
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>DATE</Text>
+                      <Text style={styles.detailValue}>{booking.date}</Text>
+                    </View>
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>TIME</Text>
+                      <Text style={styles.detailValue}>
+                        {booking.timeSlots?.sort((a, b) => a - b)[0]}:00 - {booking.timeSlots?.sort((a, b) => a - b).slice(-1)[0] + 1}:00
+                      </Text>
+                    </View>
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>DURATION</Text>
+                      <Text style={styles.detailValue}>{booking.totalHours} Hrs</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.priceSection}>
+                    <View style={styles.priceRow}>
+                      <Text style={styles.priceLabel}>Total Amount</Text>
+                      <Text style={styles.priceValue}>Rp {booking.totalAmount?.toLocaleString()}</Text>
+                    </View>
+                    <View style={styles.priceRow}>
+                      <Text style={styles.priceLabel}>Paid DP</Text>
+                      <Text style={styles.priceValue}>Rp {booking.dpAmount?.toLocaleString()}</Text>
+                    </View>
+                    <View style={styles.priceRow}>
+                      <Text style={styles.priceLabelHighlight}>Remaining</Text>
+                      <Text style={styles.priceValueHighlight}>Rp {booking.remainingAmount?.toLocaleString()}</Text>
+                    </View>
+                  </View>
+
+                  {booking.paymentProof && (
+                    <TouchableOpacity style={styles.proofToggle} activeOpacity={0.9}>
+                       <Text style={styles.proofLabel}>PAYMENT PROOF</Text>
+                       <Image source={{ uri: booking.paymentProof }} style={styles.proofImage} />
+                    </TouchableOpacity>
+                  )}
+
+                  <View style={styles.actionRow}>
+                    {canCancelBooking(booking) && (
+                      <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancellationPress(booking)}>
+                        <Ionicons name="close-circle-outline" size={18} color={theme.colors.error} />
+                        <Text style={styles.cancelBtnText}>Cancel Booking</Text>
+                      </TouchableOpacity>
+                    )}
+                    {canRateBooking(booking) && (
+                      <TouchableOpacity style={styles.rateBtn} onPress={() => handleRatingPress(booking)}>
+                        <LinearGradient colors={theme.gradients.primary} style={styles.rateGradient}>
+                          <Ionicons name="star" size={16} color="white" />
+                          <Text style={styles.rateBtnText}>Rate Session</Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    )}
+                    {isBookingCompleted(booking) && booking.has_rated === 1 && (
+                      <View style={styles.completedBadge}>
+                        <Ionicons name="checkmark-done-circle" size={18} color={theme.colors.success} />
+                        <Text style={styles.completedText}>Rated & Completed</Text>
+                      </View>
+                    )}
+                  </View>
+                </LinearGradient>
               </View>
-
-              <View style={styles.cardBody}>
-                <View style={styles.infoRow}>
-                  <Text style={styles.label}>Lapangan:</Text>
-                  <Text style={styles.value}>{booking.courtName}</Text>
-                </View>
-
-                <View style={styles.infoRow}>
-                  <Text style={styles.label}>Tanggal:</Text>
-                  <Text style={styles.value}>{booking.date}</Text>
-                </View>
-
-                <View style={styles.infoRow}>
-                  <Text style={styles.label}>Waktu:</Text>
-                  <Text style={styles.value}>
-                    {booking.timeSlots?.sort((a, b) => a - b).map(slot => `${slot}:00`).join(', ')}
-                  </Text>
-                </View>
-
-                <View style={styles.infoRow}>
-                  <Text style={styles.label}>Durasi:</Text>
-                  <Text style={styles.value}>{booking.totalHours} jam</Text>
-                </View>
-
-                {booking.staffOnDutyName && (
-                  <View style={styles.staffRow}>
-                    <Ionicons name="person-circle" size={16} color={theme.colors.primary} />
-                    <Text style={styles.staffLabel}>Petugas: </Text>
-                    <Text style={styles.staffValue}>{booking.staffOnDutyName}</Text>
-                  </View>
-                )}
-
-                <View style={styles.divider} />
-
-                <View style={styles.infoRow}>
-                  <Text style={styles.label}>Total Bayar:</Text>
-                  <Text style={styles.valuePrice}>Rp {booking.totalAmount?.toLocaleString()}</Text>
-                </View>
-
-                <View style={styles.infoRow}>
-                  <Text style={styles.label}>DP Dibayar:</Text>
-                  <Text style={styles.valuePrice}>Rp {booking.dpAmount?.toLocaleString()}</Text>
-                </View>
-
-                <View style={styles.infoRow}>
-                  <Text style={styles.label}>Sisa:</Text>
-                  <Text style={styles.valuePriceHighlight}>Rp {booking.remainingAmount?.toLocaleString()}</Text>
-                </View>
-
-                {booking.paymentProof && (
-                  <View style={styles.proofContainer}>
-                    <Text style={styles.label}>Bukti Pembayaran:</Text>
-                    <Image source={{ uri: booking.paymentProof }} style={styles.proofImage} />
-                  </View>
-                )}
-
-                {canCancelBooking(booking) && (
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={() => handleCancellationPress(booking)}
-                  >
-                    <Ionicons name="close-circle" size={16} color="white" />
-                    <Text style={styles.cancelButtonText}>Batalkan Booking</Text>
-                  </TouchableOpacity>
-                )}
-
-                {canRateBooking(booking) && (
-                  <TouchableOpacity
-                    style={styles.rateButton}
-                    onPress={() => handleRatingPress(booking)}
-                  >
-                    <Ionicons name="star" size={16} color="white" />
-                    <Text style={styles.rateButtonText}>Beri Rating</Text>
-                  </TouchableOpacity>
-                )}
-
-                {isBookingCompleted(booking) && booking.hasRated && (
-                  <View style={styles.ratedBadge}>
-                    <Ionicons name="star" size={16} color="#FFD700" />
-                    <Text style={styles.ratedText}>Sudah Diberi Rating</Text>
-                  </View>
-                )}
-
-                {booking.status === 'cancellation_requested' && (
-                  <View style={styles.cancellationBadge}>
-                    <Ionicons name="time" size={16} color="#FFA500" />
-                    <Text style={styles.cancellationText}>Menunggu Persetujuan Pembatalan</Text>
-                  </View>
-                )}
-
-              </View>
-            </View>
-          ))
+            );
+          })
         )}
       </ScrollView>
 
-      <RatingScreen
-        visible={showRatingModal}
-        booking={selectedBooking}
-        onClose={handleRatingSkip}
-        onSubmit={handleRatingSubmit}
-      />
-
-      <CancellationRequestScreen
-        visible={showCancellationModal}
-        booking={selectedBooking}
-        onClose={() => {
-          setShowCancellationModal(false);
-          setSelectedBooking(null);
-        }}
-        onSubmit={handleCancellationSubmit}
-      />
-    </>
+      <RatingScreen visible={showRatingModal} booking={selectedBooking} onClose={handleRatingSkip} onSubmit={handleRatingSubmit} />
+      <CancellationRequestScreen visible={showCancellationModal} booking={selectedBooking} onClose={() => { setShowCancellationModal(false); setSelectedBooking(null); }} onSubmit={handleCancellationSubmit} />
+    </View>
   );
 }
 
@@ -310,257 +286,239 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
-    padding: theme.spacing.medium,
-    backgroundColor: theme.colors.cardBackground,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    marginTop: 4,
-  },
-  emptyContainer: {
-    padding: theme.spacing.xlarge,
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 25,
+    flexDirection: 'row',
     alignItems: 'center',
   },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+  },
+  headerTitle: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  headerSubtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+  },
+  scrollContent: {
+    padding: 25,
+    paddingTop: 10,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 80,
+    paddingHorizontal: 40,
+  },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: theme.colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 25,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+  },
   emptyText: {
-    fontSize: 18,
-    color: theme.colors.text,
-    marginBottom: 8,
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
   },
   emptySubtext: {
-    fontSize: 14,
     color: theme.colors.textSecondary,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 30,
+  },
+  emptyButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: theme.borderRadius.medium,
+    backgroundColor: theme.colors.primary,
+  },
+  emptyButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   bookingCard: {
-    backgroundColor: theme.colors.cardBackground,
-    margin: theme.spacing.medium,
-    borderRadius: theme.borderRadius.medium,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    marginBottom: 20,
+    borderRadius: theme.borderRadius.large,
     overflow: 'hidden',
+    ...theme.shadows.medium,
+  },
+  cardGradient: {
+    padding: 20,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: theme.spacing.medium,
-    backgroundColor: 'rgba(255,0,0,0.1)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'flex-start',
+    marginBottom: 15,
+  },
+  facilityInfo: {
+    flex: 1,
   },
   facilityName: {
+    color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
-    color: theme.colors.text,
+    marginBottom: 4,
   },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#000',
-  },
-  cardBody: {
-    padding: theme.spacing.medium,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  label: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-  },
-  value: {
-    fontSize: 14,
-    color: theme.colors.text,
-    fontWeight: '500',
-    flex: 1,
-    textAlign: 'right',
-  },
-  staffRow: {
+  courtRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-    padding: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 8,
   },
-  staffLabel: {
-    fontSize: 12,
+  courtName: {
     color: theme.colors.textSecondary,
-    marginLeft: 6,
-  },
-  staffValue: {
     fontSize: 12,
-    color: theme.colors.text,
-    fontWeight: 'bold',
+    marginLeft: 4,
   },
-  valuePrice: {
-    fontSize: 14,
-    color: theme.colors.text,
-    fontWeight: 'bold',
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  valuePriceHighlight: {
-    fontSize: 14,
-    color: theme.colors.primary,
+  statusText: {
+    fontSize: 10,
     fontWeight: 'bold',
+    marginLeft: 4,
+    textTransform: 'uppercase',
   },
-  divider: {
+  cardDivider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginVertical: theme.spacing.small,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    marginVertical: 15,
   },
-  proofContainer: {
-    marginTop: theme.spacing.small,
+  detailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  detailItem: {
+    flex: 1,
+  },
+  detailLabel: {
+    color: theme.colors.textTertiary,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  detailValue: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  priceSection: {
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    padding: 15,
+    borderRadius: theme.borderRadius.medium,
+    marginBottom: 15,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  priceLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+  },
+  priceValue: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  priceLabelHighlight: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  priceValueHighlight: {
+    color: theme.colors.primary,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  proofToggle: {
+    marginBottom: 15,
+  },
+  proofLabel: {
+    color: theme.colors.textTertiary,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: 10,
   },
   proofImage: {
     width: '100%',
     height: 150,
-    borderRadius: theme.borderRadius.small,
-    marginTop: 8,
+    borderRadius: theme.borderRadius.medium,
+    backgroundColor: 'rgba(255,255,255,0.02)',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: theme.colors.cardBackground,
-    padding: 20,
-    borderRadius: 12,
-    width: '90%',
-    maxHeight: '80%',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  modalInfo: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  modalLabel: {
-    fontSize: 16,
-    color: theme.colors.text,
-    marginBottom: 8,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 8,
-    padding: 12,
-    color: theme.colors.text,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    textAlignVertical: 'top',
-    marginBottom: 16,
-  },
-  modalButtons: {
+  actionRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  modalCancelButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    flex: 1,
-    marginRight: 8,
+    justifyContent: 'flex-end',
     alignItems: 'center',
   },
-  modalConfirmButton: {
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    flex: 1,
-    marginLeft: 8,
-    alignItems: 'center',
-  },
-  modalButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  rateButton: {
-    backgroundColor: theme.colors.primary,
+  cancelBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 16,
-    gap: 8,
-  },
-  rateButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  ratedBadge: {
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 8,
-    marginTop: 16,
-    gap: 6,
+    borderRadius: theme.borderRadius.medium,
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
+    borderColor: theme.colors.error,
+    marginRight: 10,
   },
-  ratedText: {
-    color: '#FFD700',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  cancelButton: {
-    backgroundColor: '#FF4444',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 16,
-    gap: 8,
-  },
-  cancelButtonText: {
-    color: 'white',
-    fontSize: 16,
+  cancelBtnText: {
+    color: theme.colors.error,
+    fontSize: 12,
     fontWeight: 'bold',
+    marginLeft: 6,
   },
-  cancellationBadge: {
-    backgroundColor: 'rgba(255, 165, 0, 0.2)',
+  rateBtn: {
+    borderRadius: theme.borderRadius.medium,
+    overflow: 'hidden',
+  },
+  rateGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginTop: 16,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 165, 0, 0.3)',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
   },
-  cancellationText: {
-    color: '#FFA500',
-    fontSize: 14,
-    fontWeight: '600',
+  rateBtnText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 6,
+  },
+  completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  completedText: {
+    color: theme.colors.success,
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 6,
   },
 });

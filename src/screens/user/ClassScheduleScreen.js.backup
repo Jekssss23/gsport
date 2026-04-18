@@ -24,20 +24,32 @@ const ClassScheduleScreen = ({ navigation }) => {
   const [classes, setClasses] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [selectedClass, setSelectedClass] = useState(null);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [participantName, setParticipantName] = useState('');
   const [participantPhone, setParticipantPhone] = useState('');
-  const [expandedClass, setExpandedClass] = useState(null);
 
   useEffect(() => {
     loadData();
-  }, [selectedCategory]);
+    
+    // Auto-refresh every 30 seconds for real-time updates
+    const interval = setInterval(() => {
+      loadClasses();
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (selectedDate) {
+      loadClasses();
+    }
+  }, [selectedDate, selectedCategory]);
 
   const loadData = async () => {
     try {
-      setLoading(true);
       await Promise.all([
         loadCategories(),
         loadClasses(),
@@ -60,11 +72,10 @@ const ClassScheduleScreen = ({ navigation }) => {
 
   const loadClasses = async () => {
     try {
-      const user = auth.currentUser;
+      const dateString = selectedDate.toISOString().split('T')[0];
       const availableClasses = await ClassScheduleService.getAvailableClasses(
-        null,
-        selectedCategory,
-        user?.email
+        dateString,
+        selectedCategory
       );
       setClasses(availableClasses);
     } catch (error) {
@@ -126,136 +137,106 @@ const ClassScheduleScreen = ({ navigation }) => {
     }
   };
 
-  const renderClassItem = ({ item }) => {
-    const isExpanded = expandedClass === item.id;
-    
-    return (
-      <TouchableOpacity 
-        style={[styles.classCard, item.is_member && styles.memberClassCard]}
-        onPress={() => setExpandedClass(isExpanded ? null : item.id)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.classHeader}>
-          <View style={styles.classTitleRow}>
-            <View style={styles.statusIndicator}>
-              <View style={[
-                styles.statusDot, 
-                { backgroundColor: ClassScheduleService.getRealTimeStatusColor(item.real_time_status) }
-              ]} />
-              <Text style={styles.className}>{item.class_name}</Text>
-            </View>
-            {item.is_member && (
-              <View style={styles.memberBadge}>
-                <Text style={styles.memberBadgeText}>MEMBER</Text>
-              </View>
-            )}
+  const renderClassItem = ({ item }) => (
+    <View style={styles.classCard}>
+      <View style={styles.classHeader}>
+        <View style={styles.classTitleRow}>
+          <View style={styles.statusIndicator}>
+            <View style={[
+              styles.statusDot, 
+              { backgroundColor: ClassScheduleService.getRealTimeStatusColor(item.real_time_status) }
+            ]} />
+            <Text style={styles.className}>{item.class_name}</Text>
           </View>
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryText}>{item.category_name}</Text>
-          </View>
-        </View>
-
-        <View style={styles.classInfo}>
-          <View style={styles.infoRow}>
-            <Ionicons name="person-outline" size={16} color={theme.colors.textSecondary} />
-            <Text style={styles.infoText}>{item.instructor_name}</Text>
-          </View>
-
-          {item.description && (
-            <View style={styles.infoRow}>
-              <Ionicons name="information-circle-outline" size={16} color={theme.colors.textSecondary} />
-              <Text style={styles.infoText}>{item.description}</Text>
+          {ClassScheduleService.isClassLive(item) && (
+            <View style={styles.liveBadge}>
+              <Text style={styles.liveText}>LIVE</Text>
             </View>
           )}
+        </View>
+        <View style={styles.categoryBadge}>
+          <Text style={styles.categoryText}>{item.category_name}</Text>
+        </View>
+      </View>
 
-          <View style={styles.infoRow}>
-            <Ionicons name="people-outline" size={16} color={theme.colors.textSecondary} />
-            <Text style={styles.infoText}>
-              Peserta: {item.current_participants}/{item.max_participants}
-            </Text>
-            {item.remaining_capacity === 0 && (
-              <View style={styles.fullBadge}>
-                <Text style={styles.fullBadgeText}>PENUH</Text>
-              </View>
-            )}
-          </View>
+      <View style={styles.classInfo}>
+        <View style={styles.infoRow}>
+          <Ionicons name="person" size={16} color={theme.colors.textSecondary} />
+          <Text style={styles.infoText}>{item.instructor_name}</Text>
+        </View>
+        
+        <View style={styles.infoRow}>
+          <Ionicons name="calendar" size={16} color={theme.colors.textSecondary} />
+          <Text style={styles.infoText}>
+            {ClassScheduleService.formatDate(item.session_date)}
+          </Text>
+        </View>
+        
+        <View style={styles.infoRow}>
+          <Ionicons name="time" size={16} color={theme.colors.textSecondary} />
+          <Text style={styles.infoText}>
+            {ClassScheduleService.formatTime(item.start_time)} - {ClassScheduleService.formatTime(item.end_time)}
+          </Text>
         </View>
 
-        {isExpanded && (
-          <View style={styles.expandedContent}>
-            {item.is_member ? (
-              <>
-                <View style={styles.memberListSection}>
-                  <Text style={styles.memberListTitle}>Daftar Member:</Text>
-                  {item.members && item.members.length > 0 ? (
-                    item.members.map((member, index) => (
-                      <View key={index} style={styles.memberItem}>
-                        <Ionicons name="person-circle-outline" size={20} color={theme.colors.textSecondary} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.memberNameText}>{member.member_name}</Text>
-                          <Text style={styles.memberProgressText}>
-                            Pertemuan: {Number(member.meetings_attended || 0)}/{Number(item.total_meetings || 0) || '?'}
-                          </Text>
-                        </View>
-                      </View>
-                    ))
-                  ) : (
-                    <Text style={styles.emptyMembersText}>Belum ada member terdaftar.</Text>
-                  )}
-                </View>
-              </>
-            ) : (
-              <View style={styles.nonMemberInfo}>
-                <Ionicons name="information-circle-outline" size={16} color={theme.colors.textSecondary} />
-                <Text style={styles.nonMemberInfoText}>
-                  Hanya member terdaftar yang dapat melihat daftar member & absensi kelas.
-                </Text>
-              </View>
-            )}
+        {item.room && (
+          <View style={styles.infoRow}>
+            <Ionicons name="location" size={16} color={theme.colors.textSecondary} />
+            <Text style={styles.infoText}>{item.room}</Text>
+          </View>
+        )}
 
-            {item.is_member && item.my_member && (
-              <View style={styles.progressBox}>
-                <View style={styles.progressRow}>
-                  <Text style={styles.progressLabel}>Progress Pertemuan</Text>
-                  <Text style={styles.progressValue}>
-                    {item.my_member.meetings_attended}/{item.my_member.total_meetings || '?'}
-                  </Text>
-                </View>
-                <View style={styles.progressBarOuter}>
-                  <View
-                    style={[
-                      styles.progressBarInner,
-                      {
-                        width:
-                          item.my_member.total_meetings > 0
-                            ? `${Math.min(
-                                100,
-                                Math.round(
-                                  (item.my_member.meetings_attended / item.my_member.total_meetings) * 100
-                                )
-                              )}%`
-                            : '0%',
-                      },
-                    ]}
-                  />
-                </View>
-                {item.my_member.remaining_meetings !== null && (
-                  <Text style={styles.progressHint}>Sisa {item.my_member.remaining_meetings} pertemuan</Text>
-                )}
-              </View>
-            )}
+        <View style={styles.infoRow}>
+          <Ionicons name="people" size={16} color={theme.colors.textSecondary} />
+          <Text style={styles.infoText}>
+            {item.current_participants}/{item.max_participants} Peserta
+          </Text>
+        </View>
+
+        <View style={styles.infoRow}>
+          <Ionicons name="pricetag" size={16} color={theme.colors.textSecondary} />
+          <Text style={styles.priceText}>
+            Rp {item.price_per_session.toLocaleString('id-ID')}
+          </Text>
+        </View>
+
+        <View style={styles.infoRow}>
+          <Ionicons name="information-circle" size={16} color={theme.colors.textSecondary} />
+          <Text style={[
+            styles.statusText,
+            { color: ClassScheduleService.getRealTimeStatusColor(item.real_time_status) }
+          ]}>
+            {ClassScheduleService.getRealTimeStatusText(item.real_time_status)}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.classActions}>
+        {ClassScheduleService.isClassFull(item.current_participants, item.max_participants) ? (
+          <View style={[styles.actionButton, styles.disabledButton]}>
+            <Text style={styles.disabledButtonText}>Penuh</Text>
           </View>
-        )}
-        
-        {!isExpanded && (
-          <View style={styles.expandHint}>
-            <Text style={styles.expandHintText}>Klik untuk lihat detail & member</Text>
-            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+        ) : item.real_time_status === 'completed' ? (
+          <View style={[styles.actionButton, styles.disabledButton]}>
+            <Text style={styles.disabledButtonText}>Selesai</Text>
           </View>
+        ) : (
+          <TouchableOpacity
+            style={[
+              styles.actionButton, 
+              styles.bookButton,
+              ClassScheduleService.isClassLive(item) && styles.liveButton
+            ]}
+            onPress={() => handleBookClass(item)}
+          >
+            <Text style={styles.bookButtonText}>
+              {ClassScheduleService.isClassLive(item) ? 'Join Now' : 'Booking'}
+            </Text>
+          </TouchableOpacity>
         )}
-      </TouchableOpacity>
-    );
-  };
+      </View>
+    </View>
+  );
 
   const renderCategoryItem = ({ item }) => (
     <TouchableOpacity
@@ -324,7 +305,7 @@ const ClassScheduleScreen = ({ navigation }) => {
         {/* Classes List */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            Daftar Kelas Tersedia
+            Kelas Tersedia - {ClassScheduleService.formatDate(selectedDate)}
           </Text>
           
           {classes.length === 0 ? (
@@ -371,8 +352,17 @@ const ClassScheduleScreen = ({ navigation }) => {
               <View>
                 <View style={styles.bookingClassInfo}>
                   <Text style={styles.bookingClassName}>{selectedClass.class_name}</Text>
-                  <Text style={styles.bookingInstructor}>Instruktur: {selectedClass.instructor_name}</Text>
-                  <Text style={styles.bookingCategory}>Kategori: {selectedClass.category_name}</Text>
+                  <Text style={styles.bookingInstructor}>
+                    Instruktur: {selectedClass.instructor_name}
+                  </Text>
+                  <Text style={styles.bookingSchedule}>
+                    {ClassScheduleService.formatDate(selectedClass.session_date)} •{' '}
+                    {ClassScheduleService.formatTime(selectedClass.start_time)} -{' '}
+                    {ClassScheduleService.formatTime(selectedClass.end_time)}
+                  </Text>
+                  <Text style={styles.bookingPrice}>
+                    Rp {selectedClass.price_per_session.toLocaleString('id-ID')}
+                  </Text>
                 </View>
 
                 <View style={styles.bookingForm}>
@@ -499,140 +489,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  memberClassCard: {
-    borderColor: theme.colors.primary,
-    borderWidth: 2,
-    backgroundColor: '#f0f9ff',
-  },
-  memberBadge: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-  memberBadgeText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  fullBadge: {
-    backgroundColor: '#dc3545',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-  fullBadgeText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  expandedContent: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  memberListSection: {
-    marginBottom: 16,
-  },
-  memberListTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: 8,
-  },
-  memberItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    paddingLeft: 4,
-  },
-  memberNameText: {
-    fontSize: 14,
-    color: theme.colors.text,
-    marginLeft: 8,
-  },
-  memberProgressText: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    marginLeft: 8,
-    marginTop: 2,
-  },
-  emptyMembersText: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    fontStyle: 'italic',
-  },
-  progressBox: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  progressLabel: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    fontWeight: '700',
-  },
-  progressValue: {
-    fontSize: 12,
-    color: 'white',
-    fontWeight: '800',
-  },
-  progressBarOuter: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    overflow: 'hidden',
-  },
-  progressBarInner: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: theme.colors.primary,
-  },
-  progressHint: {
-    marginTop: 8,
-    fontSize: 11,
-    color: theme.colors.textSecondary,
-  },
-  nonMemberInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  nonMemberInfoText: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    marginLeft: 8,
-    flex: 1,
-  },
-  expandHint: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  expandHintText: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    marginRight: 4,
-  },
   classHeader: {
     marginBottom: 12,
   },
@@ -693,18 +549,46 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.textSecondary,
     marginLeft: 8,
+    flex: 1,
+  },
+  priceText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: theme.colors.primary,
+    marginLeft: 8,
+  },
+  classActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  actionButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    minWidth: 100,
   },
   bookButton: {
     backgroundColor: theme.colors.primary,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 8,
+  },
+  disabledButton: {
+    backgroundColor: theme.colors.textSecondary,
   },
   bookButtonText: {
     color: 'white',
-    fontSize: 16,
     fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  liveButton: {
+    backgroundColor: '#dc3545',
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  disabledButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   emptyContainer: {
     alignItems: 'center',
@@ -758,9 +642,15 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     marginBottom: 4,
   },
-  bookingCategory: {
-    fontSize: 16,
+  bookingSchedule: {
+    fontSize: 14,
     color: theme.colors.textSecondary,
+    marginBottom: 8,
+  },
+  bookingPrice: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: theme.colors.primary,
   },
   bookingForm: {
     marginBottom: 20,
@@ -812,5 +702,153 @@ const styles = StyleSheet.create({
     color: 'white',
   },
 });
+
+const fetchMembers = async (classId) => {
+    if (membersMap[classId]) return;
+    try {
+      const snap = await getDocs(collection(db, 'classes', classId, 'members'));
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setMembersMap(prev => ({ ...prev, [classId]: data }));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleExpand = (classId) => {
+    if (expandedClass === classId) {
+      setExpandedClass(null);
+    } else {
+      setExpandedClass(classId);
+      fetchMembers(classId);
+    }
+  };
+
+  const renderClassItem = ({ item }) => (
+    <View style={styles.classCard}>
+      <TouchableOpacity
+        onPress={() => toggleExpand(item.id)}
+        activeOpacity={0.7}
+      >
+        <LinearGradient
+          colors={['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)']}
+          style={styles.cardContent}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.coachInfo}>
+              {item.coachImage ? (
+                <Image source={{ uri: item.coachImage }} style={styles.coachAvatar} />
+              ) : (
+                <View style={[styles.coachAvatar, styles.placeholderAvatar]}>
+                  <Ionicons name="person" size={20} color="#666" />
+                </View>
+              )}
+              <View>
+                <Text style={styles.className}>{item.name}</Text>
+                <Text style={styles.coachName}>Coach: {item.coachName}</Text>
+              </View>
+            </View>
+            <Ionicons
+              name={expandedClass === item.id ? "chevron-up" : "chevron-down"}
+              size={20}
+              color={theme.colors.primary}
+            />
+          </View>
+
+          <View style={styles.scheduleRow}>
+            <View style={styles.scheduleBadge}>
+              <Ionicons name="calendar-outline" size={14} color="white" />
+              <Text style={styles.badgeText}>{item.days?.join(', ') || item.day || '-'}</Text>
+            </View>
+            <View style={[styles.scheduleBadge, { backgroundColor: 'rgba(255,0,0,0.1)' }]}>
+              <Ionicons name="time-outline" size={14} color={theme.colors.primary} />
+              <Text style={[styles.badgeText, { color: theme.colors.primary }]}>
+                {item.startTime} - {item.endTime}
+              </Text>
+            </View>
+          </View>
+
+          {expandedClass === item.id && (
+            <View style={styles.expandedContent}>
+              <View style={styles.divider} />
+              <Text style={styles.membersTitle}>Daftar Murid ({membersMap[item.id]?.length || 0})</Text>
+              {membersMap[item.id] ? (
+                membersMap[item.id].length > 0 ? (
+                  membersMap[item.id].map(m => (
+                    <View key={m.id} style={styles.memberItem}>
+                      <View style={styles.memberMain}>
+                        <Text style={styles.memberName}>{m.name}</Text>
+                        <Text style={styles.memberSub}>{m.age} thn • {m.gender}</Text>
+                      </View>
+                      <Ionicons
+                        name={m.gender === 'Laki-laki' ? 'male' : 'female'}
+                        size={14}
+                        color={m.gender === 'Laki-laki' ? '#00BFFF' : '#FF69B4'}
+                      />
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.emptyMembers}>Belum ada murid terdaftar.</Text>
+                )
+              ) : (
+                <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 10 }} />
+              )}
+            </View>
+          )}
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderCategory = (category) => {
+    const categoryClasses = classes.filter(c => c.category === category);
+    if (categoryClasses.length === 0) return null;
+
+    return (
+      <View key={category} style={styles.categorySection}>
+        <View style={styles.categoryHeader}>
+          <View style={styles.categoryDot} />
+          <Text style={styles.categoryTitle}>{category}</Text>
+        </View>
+        {categoryClasses.map(item => renderClassItem({ item }))}
+      </View>
+    );
+  };
+
+  // Early return for loading state
+  if (loading && classes.length === 0) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.loadingText}>Memuat jadwal kelas...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <LinearGradient
+        colors={[theme.colors.cardBackground, theme.colors.background]}
+        style={styles.header}
+      >
+        <Text style={styles.headerTitle}>Jadwal Kelas & Les</Text>
+        <Text style={styles.headerSub}>G-Sports Center Academy</Text>
+      </LinearGradient>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {categories.map(cat => renderCategory(cat))}
+
+        {classes.length === 0 && !loading && (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="calendar-outline" size={60} color="#333" />
+            <Text style={styles.emptyText}>Belum ada jadwal kelas yang tersedia.</Text>
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+};
 
 export default ClassScheduleScreen;

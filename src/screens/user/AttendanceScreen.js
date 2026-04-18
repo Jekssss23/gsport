@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import { auth, db } from '../../config/firebase';
 import { collection, addDoc, doc, getDoc, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { theme } from '../../styles/theme';
@@ -14,6 +15,7 @@ export default function AttendanceScreen({ navigation }) {
   const [attendanceSettings, setAttendanceSettings] = useState(null);
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [userName, setUserName] = useState('');
+  const [selfieBase64, setSelfieBase64] = useState(null);
 
   useEffect(() => {
     fetchUserData();
@@ -73,9 +75,18 @@ export default function AttendanceScreen({ navigation }) {
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.BestForNavigation,
       });
+
+      if (location.mocked) {
+        Alert.alert(
+          'Peringatan Keamanan',
+          'Terdeteksi penggunaan Fake GPS! Status absen Anda akan tercatat sebagai Fake GPS.'
+        );
+      }
+
       setCurrentLocation({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
+        isMocked: location.mocked || false,
       });
       setLocationLoading(false);
     } catch (error) {
@@ -87,65 +98,75 @@ export default function AttendanceScreen({ navigation }) {
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371e3; // Earth radius in meters
-    const φ1 = (lat1 * Math.PI) / 180;
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
     const a =
-      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c; // Distance in meters
+    return R * c;
   };
 
-  const handleCheckIn = async () => {
-    if (!currentLocation || !attendanceSettings) {
-      Alert.alert('Error', 'Location data not available');
+  const handleTakeSelfie = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'Camera permission is required');
       return;
     }
 
-    const distance = calculateDistance(
-      currentLocation.latitude,
-      currentLocation.longitude,
-      attendanceSettings.latitude,
-      attendanceSettings.longitude
-    );
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.5,
+      base64: true,
+    });
 
-    if (distance > attendanceSettings.radius) {
-      Alert.alert(
-        'Out of Range',
-        `You are ${Math.round(distance)}m away from the attendance location. You must be within ${attendanceSettings.radius}m to check in.`
-      );
+    if (!result.canceled) {
+      setSelfieBase64(result.assets[0].base64);
+    }
+  };
+
+  const handleCheckIn = async () => {
+    if (!selfieBase64) {
+      Alert.alert('Error', 'Please take a selfie first');
       return;
     }
 
     setLoading(true);
     try {
       const now = new Date();
-      const time = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
       const date = now.toISOString().split('T')[0];
+      const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      // Determine status based on time (assuming work starts at 08:00)
-      const hour = now.getHours();
-      const minute = now.getMinutes();
-      const status = (hour > 8 || (hour === 8 && minute > 0)) ? 'terlambat' : 'hadir';
+      // Determine status
+      let status = 'hadir';
+      const checkInTime = now.getHours() * 60 + now.getMinutes();
+      const [limitH, limitM] = attendanceSettings.checkInLimit.split(':').map(Number);
+      const limitTime = limitH * 60 + limitM;
 
-      await addDoc(collection(db, 'attendances'), {
+      if (currentLocation.isMocked) {
+        status = 'fake gps';
+      } else if (checkInTime > limitTime) {
+        status = 'terlambat';
+      }
+
+      const attendanceData = {
         employeeId: auth.currentUser.uid,
         employeeName: userName,
         date,
         checkIn: time,
         status,
-        location: currentLocation,
-        createdAt: now,
-      });
+        checkInLocation: currentLocation,
+        selfie: selfieBase64,
+        createdAt: new Date().toISOString(),
+      };
 
-      Alert.alert('Success', 'Check-in successful!');
-      checkTodayAttendance();
+      await addDoc(collection(db, 'attendances'), attendanceData);
+      setTodayAttendance(attendanceData);
+      Alert.alert('Success', 'Check in successful');
     } catch (error) {
-      console.error('Error checking in:', error);
+      console.error('Error check in:', error);
       Alert.alert('Error', 'Failed to check in');
     } finally {
       setLoading(false);
@@ -153,12 +174,10 @@ export default function AttendanceScreen({ navigation }) {
   };
 
   const handleCheckOut = async () => {
-    if (!todayAttendance) return;
-
     setLoading(true);
     try {
       const now = new Date();
-      const time = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const today = now.toISOString().split('T')[0];
 
       const q = query(
@@ -169,17 +188,16 @@ export default function AttendanceScreen({ navigation }) {
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        const docRef = querySnapshot.docs[0].ref;
-        await updateDoc(docRef, {
+        const docId = querySnapshot.docs[0].id;
+        await updateDoc(doc(db, 'attendances', docId), {
           checkOut: time,
-          updatedAt: now,
+          checkOutLocation: currentLocation,
         });
-
-        Alert.alert('Success', 'Check-out successful!');
-        checkTodayAttendance();
+        setTodayAttendance({ ...todayAttendance, checkOut: time });
+        Alert.alert('Success', 'Check out successful');
       }
     } catch (error) {
-      console.error('Error checking out:', error);
+      console.error('Error check out:', error);
       Alert.alert('Error', 'Failed to check out');
     } finally {
       setLoading(false);
@@ -210,21 +228,20 @@ export default function AttendanceScreen({ navigation }) {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="white" />
+          <Ionicons name="arrow-back-outline" size={24} color="white" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Attendance</Text>
+        <Text style={styles.headerTitle}>Absensi Kehadiran</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <View style={styles.content}>
-        {/* Location Status Card */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.contentContainer}>
         <View style={styles.statusCard}>
           <LinearGradient
             colors={isInRange ? ['#10b981', '#059669'] : ['#ef4444', '#dc2626']}
             style={styles.statusGradient}
           >
             <Ionicons
-              name={isInRange ? 'checkmark-circle' : 'close-circle'}
+              name={isInRange ? 'checkmark-circle-outline' : 'close-circle-outline'}
               size={48}
               color="white"
             />
@@ -262,13 +279,46 @@ export default function AttendanceScreen({ navigation }) {
           </View>
         )}
 
-        {/* Action Buttons */}
-        <View style={styles.buttonContainer}>
-          {!todayAttendance ? (
+        {!isInRange && (
+          <View style={styles.warningCard}>
+            <Ionicons name="warning-outline" size={24} color="#f59e0b" />
+            <Text style={styles.warningText}>
+              You must be within {attendanceSettings?.radius}m of {attendanceSettings?.locationName} to check in
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Fixed Bottom Action Area */}
+      <View style={styles.fixedBottom}>
+        {!todayAttendance ? (
+          // BEFORE CHECK IN (Show Selfie & Check In Button side-by-side)
+          <View style={{ flexDirection: 'row', alignItems: 'stretch' }}>
+            <TouchableOpacity
+              onPress={handleTakeSelfie}
+              disabled={!isInRange || loading}
+              activeOpacity={0.85}
+              style={[
+                styles.selfieAction,
+                (!isInRange || loading) && { opacity: 0.6 },
+                selfieBase64 && { backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: '#10b981', borderWidth: 1 }
+              ]}
+            >
+              <Ionicons
+                name={selfieBase64 ? "checkmark-circle" : "camera"}
+                size={24}
+                color={selfieBase64 ? "#10b981" : "white"}
+              />
+              <Text style={[styles.selfieActionText, selfieBase64 && { color: '#10b981' }]}>
+                {selfieBase64 ? 'Siap' : 'Selfie'}
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               onPress={handleCheckIn}
               disabled={!isInRange || loading}
               activeOpacity={0.8}
+              style={{ flex: 1, marginLeft: 10 }}
             >
               <LinearGradient
                 colors={isInRange && !loading ? ['#FF0000', '#990000'] : ['#666', '#444']}
@@ -278,46 +328,39 @@ export default function AttendanceScreen({ navigation }) {
                   <ActivityIndicator color="white" />
                 ) : (
                   <>
-                    <Ionicons name="log-in" size={24} color="white" />
+                    <Ionicons name="log-in-outline" size={24} color="white" />
                     <Text style={styles.buttonText}>Check In</Text>
                   </>
                 )}
               </LinearGradient>
             </TouchableOpacity>
-          ) : !todayAttendance.checkOut ? (
-            <TouchableOpacity
-              onPress={handleCheckOut}
-              disabled={loading}
-              activeOpacity={0.8}
+          </View>
+        ) : !todayAttendance.checkOut ? (
+          // BEFORE CHECK OUT
+          <TouchableOpacity
+            onPress={handleCheckOut}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#FF0000', '#990000']}
+              style={styles.actionButton}
             >
-              <LinearGradient
-                colors={['#FF0000', '#990000']}
-                style={styles.actionButton}
-              >
-                {loading ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <>
-                    <Ionicons name="log-out" size={24} color="white" />
-                    <Text style={styles.buttonText}>Check Out</Text>
-                  </>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.completedCard}>
-              <Ionicons name="checkmark-done-circle" size={48} color="#10b981" />
-              <Text style={styles.completedText}>Attendance Complete</Text>
-            </View>
-          )}
-        </View>
-
-        {!isInRange && (
-          <View style={styles.warningCard}>
-            <Ionicons name="warning" size={24} color="#f59e0b" />
-            <Text style={styles.warningText}>
-              You must be within {attendanceSettings?.radius}m of {attendanceSettings?.locationName} to check in
-            </Text>
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <>
+                  <Ionicons name="log-out-outline" size={24} color="white" />
+                  <Text style={styles.buttonText}>Check Out</Text>
+                </>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+        ) : (
+          // COMPLETE
+          <View style={styles.completedCard}>
+            <Ionicons name="checkmark-done-circle-outline" size={48} color="#10b981" />
+            <Text style={styles.completedText}>Attendance Complete</Text>
           </View>
         )}
       </View>
@@ -331,6 +374,7 @@ const getStatusColor = (status) => {
     case 'terlambat': return '#f59e0b';
     case 'izin': return '#3b82f6';
     case 'alpha': return '#ef4444';
+    case 'fake gps': return '#ff0000'; // Pure red for fake gps
     default: return '#666';
   }
 };
@@ -367,9 +411,10 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
   },
-  content: {
-    flex: 1,
+  contentContainer: {
+    flexGrow: 1,
     padding: 20,
+    paddingBottom: 40,
   },
   statusCard: {
     marginBottom: 20,
@@ -429,45 +474,69 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   buttonContainer: {
-    marginTop: 20,
+    marginBottom: 0,
   },
   actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
+    height: 60,
     borderRadius: 15,
-    gap: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   buttonText: {
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
+    marginLeft: 10,
   },
   completedCard: {
-    alignItems: 'center',
-    padding: 30,
-    backgroundColor: theme.colors.cardBackground,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    padding: 20,
     borderRadius: 15,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#10b981',
   },
   completedText: {
-    color: theme.colors.text,
+    color: '#10b981',
     fontSize: 18,
     fontWeight: 'bold',
     marginTop: 10,
   },
-  warningCard: {
-    flexDirection: 'row',
+  selfieAction: {
+    flex: 0.8,
+    backgroundColor: '#444',
+    height: 60,
+    borderRadius: 15,
+    justifyContent: 'center',
     alignItems: 'center',
+  },
+  selfieActionText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  warningCard: {
     backgroundColor: 'rgba(245, 158, 11, 0.1)',
     padding: 15,
-    borderRadius: 10,
-    marginTop: 20,
-    gap: 10,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#f59e0b',
   },
   warningText: {
     color: '#f59e0b',
-    fontSize: 14,
+    fontSize: 12,
+    marginLeft: 10,
     flex: 1,
+  },
+  fixedBottom: {
+    padding: 20,
+    paddingBottom: 30,
+    backgroundColor: theme.colors.background,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
   },
 });

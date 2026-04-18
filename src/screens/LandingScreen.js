@@ -1,29 +1,93 @@
-import React from 'react';
-import { View, StyleSheet, Dimensions, TouchableOpacity, Text } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Dimensions, TouchableOpacity, Text, Animated, Image } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
+import { theme } from '../styles/theme';
 
 const { width, height } = Dimensions.get('window');
 
 export default function LandingScreen({ navigation }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
   return (
     <View style={styles.container}>
+      <StatusBar style="light" />
       
-      {/* Temporary placeholder for video */}
-      <View style={styles.videoContainer}>
-        <View style={styles.videoPlaceholder}>
-          <Text style={styles.placeholderText}>GSC Sports Center</Text>
-        </View>
+      {/* Background with Dark Gradient and subtle overlay */}
+      <LinearGradient
+        colors={[theme.colors.background, theme.colors.secondary]}
+        style={StyleSheet.absoluteFill}
+      />
+      
+      {/* Visual content */}
+      <View style={styles.content}>
+        <Animated.View style={[
+          styles.logoContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }]
+          }
+        ]}>
+          <View style={styles.logoCircle}>
+             <Text style={styles.logoText}>GSC</Text>
+          </View>
+        </Animated.View>
+
+        <Animated.View style={[
+          styles.textContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }]
+          }
+        ]}>
+          <Text style={styles.title}>G SPORTS CENTER</Text>
+          <View style={styles.separator} />
+          <Text style={styles.subtitle}>PREMIUM SPORTS EXPERIENCE</Text>
+        </Animated.View>
       </View>
 
-      {/* Invisible touchable area to navigate */}
+      {/* Action Area */}
       <TouchableOpacity 
         style={styles.touchableOverlay}
         onPress={() => navigation.navigate('Login')}
-        activeOpacity={1}
+        activeOpacity={0.9}
       >
-         <View style={styles.tapIndicator}>
-             <Text style={styles.tapText}>Tap anywhere to continue</Text>
-         </View>
+         <Animated.View style={[
+           styles.tapIndicator,
+           { opacity: fadeAnim }
+         ]}>
+             <LinearGradient
+               colors={theme.gradients.primary}
+               start={{ x: 0, y: 0 }}
+               end={{ x: 1, y: 0 }}
+               style={styles.button}
+             >
+                <Text style={styles.buttonText}>GET STARTED</Text>
+             </LinearGradient>
+         </Animated.View>
       </TouchableOpacity>
     </View>
   );
@@ -33,49 +97,78 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'black',
+  },
+  content: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 40,
   },
-  videoContainer: {
-    width: width,
-    height: height, // Occupy full screen, let resizeMode handle the rest
-    justifyContent: 'center',
+  logoContainer: {
+    marginBottom: 40,
     alignItems: 'center',
   },
-  video: {
-    width: '100%',
-    height: '100%',
-  },
-  videoPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#000',
+  logoCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 4,
+    borderColor: 'rgba(255,255,255,0.2)',
+    ...theme.shadows.heavy,
   },
-  placeholderText: {
+  logoText: {
     color: 'white',
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 40,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  textContainer: {
+    alignItems: 'center',
+  },
+  title: {
+    color: 'white',
+    fontSize: 28,
+    fontWeight: '800',
     textAlign: 'center',
+    letterSpacing: 4,
+  },
+  separator: {
+    width: 40,
+    height: 3,
+    backgroundColor: theme.colors.primary,
+    marginVertical: 20,
+    borderRadius: 2,
+  },
+  subtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    letterSpacing: 3,
+    textAlign: 'center',
+    textTransform: 'uppercase',
   },
   touchableOverlay: {
     position: 'absolute',
-    top: 0,
+    bottom: 60,
     left: 0,
     right: 0,
-    bottom: 0,
-    justifyContent: 'flex-end',
     alignItems: 'center',
-    paddingBottom: 50,
   },
   tapIndicator: {
-    opacity: 0.5,
+    width: width * 0.7,
   },
-  tapText: {
+  button: {
+    paddingVertical: 18,
+    borderRadius: theme.borderRadius.round,
+    alignItems: 'center',
+    ...theme.shadows.medium,
+  },
+  buttonText: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 16,
+    fontWeight: 'bold',
     letterSpacing: 2,
-    textTransform: 'uppercase',
   },
 });

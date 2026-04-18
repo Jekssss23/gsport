@@ -85,9 +85,17 @@ export default function AdminDashboard({ navigation }) {
         <AdminCard
           title="Absensi"
           description="Catat kehadiran member"
-          icon="finger-print"
+          icon="finger-print-outline"
           route="Attendance"
           gradientColors={['#333333', '#000000']}
+        />
+
+        <AdminCard
+          title="Scan Absensi Kelas"
+          description="Scan QR member untuk hadir"
+          icon="qr-code-outline"
+          route="ClassAttendanceScan"
+          gradientColors={['#111827', '#000000']}
         />
 
         <AdminCard
