@@ -17,10 +17,16 @@ const SPORTS = [
   { id: 'pickleball', name: 'Pickleball', pricePerHour: 50000, icon: 'baseball' },
 ];
 
+const PACKAGES = [
+  { id: 'paket_a', name: 'Paket A', hours: 30, validityMonths: 3, price: 1000000 },
+  { id: 'paket_b', name: 'Paket B', hours: 50, validityMonths: 6, price: 1500000 },
+  { id: 'paket_c', name: 'Paket C', hours: 100, validityMonths: 12, price: 2500000 },
+];
+
 export default function BuyPackageScreen({ navigation }) {
   const [step, setStep] = useState(1);
   const [selectedSport, setSelectedSport] = useState(null);
-  const [hours, setHours] = useState(5);
+  const [selectedPackage, setSelectedPackage] = useState(null);
   const [paymentProof, setPaymentProof] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -29,8 +35,8 @@ export default function BuyPackageScreen({ navigation }) {
       Alert.alert('Error', 'Please select a sport first');
       return;
     }
-    if (hours < 5) {
-      Alert.alert('Error', 'Minimum purchase is 5 hours');
+    if (!selectedPackage) {
+      Alert.alert('Error', 'Please select a package');
       return;
     }
     setStep(2);
@@ -56,8 +62,8 @@ export default function BuyPackageScreen({ navigation }) {
   };
 
   const calculateTotal = () => {
-    if (!selectedSport) return 0;
-    return selectedSport.pricePerHour * hours;
+    if (!selectedPackage) return 0;
+    return selectedPackage.price;
   };
 
   const formatCurrency = (amount) => {
@@ -110,17 +116,19 @@ export default function BuyPackageScreen({ navigation }) {
         userId: auth.currentUser.uid,
         userEmail: auth.currentUser.email,
         sportType: selectedSport.name,
-        pricePerHour: selectedSport.pricePerHour,
-        totalHours: hours,
-        remainingHours: hours,
+        packageName: selectedPackage.name,
+        pricePerHour: Math.round(selectedPackage.price / selectedPackage.hours),
+        totalHours: selectedPackage.hours,
+        remainingHours: selectedPackage.hours,
         totalPrice: calculateTotal(),
         status: 'active',
+        validityMonths: selectedPackage.validityMonths,
         paymentProofBase64: paymentProof,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
 
-      await recordFinancials(calculateTotal(), 'package', `GSC Package Purchase ${selectedSport.name} ${hours} Hours`);
+      await recordFinancials(calculateTotal(), 'package', `GSC Package Purchase ${selectedPackage.name} for ${selectedSport.name}`);
 
       Alert.alert(
         'Success', 
@@ -186,27 +194,39 @@ export default function BuyPackageScreen({ navigation }) {
               ))}
             </View>
 
-            <Text style={styles.sectionHeader}>Hours to Purchase</Text>
-            <View style={styles.hoursBox}>
-              <View style={styles.hoursControls}>
+            <Text style={styles.sectionHeader}>Select Package</Text>
+            <View style={styles.packageList}>
+              {PACKAGES.map((pkg) => (
                 <TouchableOpacity
-                  style={styles.controlBtn}
-                  onPress={() => setHours(Math.max(5, hours - 1))}
+                  key={pkg.id}
+                  style={[
+                    styles.pkgCard,
+                    selectedPackage?.id === pkg.id && styles.pkgCardActive
+                  ]}
+                  onPress={() => setSelectedPackage(pkg)}
+                  activeOpacity={0.8}
                 >
-                  <Ionicons name="remove" size={24} color="white" />
+                  <LinearGradient
+                    colors={selectedPackage?.id === pkg.id ? ['#10b981', '#059669'] : ['#1A1A1A', '#0F0F0F']}
+                    style={styles.pkgGradient}
+                  >
+                    <View style={styles.pkgInfoLeft}>
+                      <Text style={styles.pkgNameText}>{pkg.name}</Text>
+                      <Text style={styles.pkgDetailsText}>{pkg.hours} Hours • Valid {pkg.validityMonths} Months</Text>
+                    </View>
+                    <View style={styles.pkgInfoRight}>
+                      <Text style={[styles.pkgPriceText, { color: selectedPackage?.id === pkg.id ? 'white' : theme.colors.textSecondary }]}>
+                        {formatCurrency(pkg.price)}
+                      </Text>
+                    </View>
+                    {selectedPackage?.id === pkg.id && (
+                      <View style={styles.checkBadge}>
+                        <Ionicons name="checkmark" size={12} color="white" />
+                      </View>
+                    )}
+                  </LinearGradient>
                 </TouchableOpacity>
-                <View style={styles.hourValueContainer}>
-                  <Text style={styles.hourValueText}>{hours}</Text>
-                  <Text style={styles.hourUnitText}>Hours</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.controlBtn}
-                  onPress={() => setHours(hours + 1)}
-                >
-                  <Ionicons name="add" size={24} color="white" />
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.minNote}>* Minimum 5 hours per package</Text>
+              ))}
             </View>
 
             <View style={styles.summaryContainer}>
@@ -237,10 +257,11 @@ export default function BuyPackageScreen({ navigation }) {
                 
                 <View style={styles.qrisWrapper}>
                   <View style={styles.qrisBox}>
-                    <Ionicons name="qr-code" size={150} color="white" />
-                    <View style={styles.qrisOverlay}>
-                       <Text style={styles.qrisBrand}>GSC SPORTS</Text>
-                    </View>
+                    <Image 
+                      source={require('../../../assets/qris-gsc-bni.jpeg')} 
+                      style={{ width: 180, height: 180, borderRadius: 10 }} 
+                      resizeMode="contain" 
+                    />
                   </View>
                   <Text style={styles.paymentAmount}>{formatCurrency(calculateTotal())}</Text>
                 </View>
@@ -389,49 +410,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...theme.shadows.light,
   },
-  hoursBox: {
-    backgroundColor: theme.colors.surface,
-    padding: 25,
-    borderRadius: theme.borderRadius.large,
-    borderWidth: 1,
-    borderColor: theme.colors.glassBorder,
-    alignItems: 'center',
+  packageList: {
     marginBottom: 30,
   },
-  hoursControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  pkgCard: {
+    borderRadius: theme.borderRadius.large,
+    overflow: 'hidden',
+    marginBottom: 15,
+    ...theme.shadows.medium,
   },
-  controlBtn: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: theme.colors.surfaceLight,
-    justifyContent: 'center',
-    alignItems: 'center',
+  pkgCardActive: {
+    borderColor: theme.colors.primary,
     borderWidth: 1,
-    borderColor: theme.colors.glassBorder,
   },
-  hourValueContainer: {
-    width: 100,
+  pkgGradient: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    padding: 20,
   },
-  hourValueText: {
+  pkgInfoLeft: {
+    flex: 1,
+  },
+  pkgNameText: {
     color: 'white',
-    fontSize: 42,
-    fontWeight: '900',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
   },
-  hourUnitText: {
+  pkgDetailsText: {
     color: theme.colors.textSecondary,
-    fontSize: 12,
-    marginTop: -5,
+    fontSize: 13,
   },
-  minNote: {
-    color: theme.colors.textTertiary,
-    fontSize: 11,
-    marginTop: 20,
-    fontStyle: 'italic',
+  pkgInfoRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  pkgPriceText: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   summaryContainer: {
     backgroundColor: 'rgba(255,255,255,0.03)',

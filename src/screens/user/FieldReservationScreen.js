@@ -485,6 +485,32 @@ const FieldReservationScreen = ({ navigation, route }) => {
           </LinearGradient>
         </View>
 
+        <View style={styles.paymentCard}>
+          <LinearGradient
+            colors={['#2A2A2A', '#0F0F0F']}
+            style={styles.paymentGradient}
+          >
+            <Text style={styles.paymentTitle}>Scan QRIS</Text>
+            <Text style={styles.paymentDesc}>Scan this code with any e-wallet or mobile banking app to pay the Down Payment.</Text>
+            
+            <View style={styles.qrisWrapper}>
+              <View style={styles.qrisBox}>
+                <Image 
+                  source={require('../../../assets/qris-gsc-bni.jpeg')} 
+                  style={{ width: 180, height: 180, borderRadius: 10 }} 
+                  resizeMode="contain" 
+                />
+              </View>
+              <Text style={styles.paymentAmount}>Rp {dp.toLocaleString('id-ID')}</Text>
+            </View>
+
+            <View style={styles.bankInfo}>
+              <Ionicons name="card-outline" size={20} color={theme.colors.textSecondary} />
+              <Text style={styles.bankText}>BNI (G Sports Center)</Text>
+            </View>
+          </LinearGradient>
+        </View>
+
         <Text style={[styles.sectionHeader, { marginTop: 25 }]}>Upload Payment Proof</Text>
         <TouchableOpacity style={styles.uploadArea} onPress={pickImage} activeOpacity={0.8}>
           {paymentProof ? (
@@ -916,6 +942,60 @@ const styles = StyleSheet.create({
   uploadedImg: {
     width: '100%',
     height: '100%',
+  },
+  paymentCard: {
+    borderRadius: theme.borderRadius.large,
+    overflow: 'hidden',
+    marginBottom: 30,
+    ...theme.shadows.heavy, 
+  },
+  paymentGradient: {
+    padding: 25,
+    alignItems: 'center',
+  },
+  paymentTitle: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  paymentDesc: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 25,
+  },
+  qrisWrapper: {
+    alignItems: 'center',
+    marginBottom: 25,
+  },
+  qrisBox: {
+    padding: 20,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...theme.shadows.heavy,
+  },
+  paymentAmount: {
+    color: 'white',
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginTop: 20,
+  },
+  bankInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 10, 
+  },
+  bankText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    marginLeft: 10, 
   },
 });
 

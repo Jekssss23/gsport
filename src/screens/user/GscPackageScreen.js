@@ -89,7 +89,7 @@ export default function GscPackageScreen({ navigation }) {
                   <QRCode
                     value={item.id}
                     size={120}
-                    color="white"
+                    color="black"
                     backgroundColor="transparent"
                   />
                 </View>
