@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import { ClassScheduleService } from '../../services/ClassScheduleService';
 import { auth } from '../../config/firebase';
+import { getUserFriendlyErrorMessage } from '../../utils/errorMessages';
 
 const ClassScheduleScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
@@ -30,6 +31,7 @@ const ClassScheduleScreen = ({ navigation }) => {
   const [participantName, setParticipantName] = useState('');
   const [participantPhone, setParticipantPhone] = useState('');
   const [expandedClass, setExpandedClass] = useState(null);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     loadData();
@@ -38,12 +40,14 @@ const ClassScheduleScreen = ({ navigation }) => {
   const loadData = async () => {
     try {
       setLoading(true);
+      setLoadError('');
       await Promise.all([
         loadCategories(),
         loadClasses(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
+      setLoadError(error?.message || 'Gagal memuat data kelas.');
     } finally {
       setLoading(false);
     }
@@ -120,7 +124,7 @@ const ClassScheduleScreen = ({ navigation }) => {
         ]
       );
     } catch (error) {
-      Alert.alert('Error', error.message || 'Gagal melakukan booking kelas');
+      Alert.alert('Error', getUserFriendlyErrorMessage(error, 'Gagal melakukan booking kelas.'));
     } finally {
       setBookingLoading(false);
     }
@@ -308,6 +312,12 @@ const ClassScheduleScreen = ({ navigation }) => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
+        {loadError ? (
+          <View style={styles.errorInline}>
+            <Ionicons name="warning-outline" size={16} color="#f59e0b" />
+            <Text style={styles.errorInlineText}>{loadError}</Text>
+          </View>
+        ) : null}
         {/* Categories */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Kategori</Text>
@@ -500,9 +510,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   memberClassCard: {
-    borderColor: theme.colors.primary,
+    borderColor: '#8A0F0F',
     borderWidth: 2,
-    backgroundColor: '#f0f9ff',
+    backgroundColor: '#191919',
   },
   memberBadge: {
     backgroundColor: theme.colors.primary,
@@ -551,12 +561,12 @@ const styles = StyleSheet.create({
   },
   memberNameText: {
     fontSize: 14,
-    color: theme.colors.text,
+    color: '#f2f2f2',
     marginLeft: 8,
   },
   memberProgressText: {
     fontSize: 12,
-    color: theme.colors.textSecondary,
+    color: '#cfcfcf',
     marginLeft: 8,
     marginTop: 2,
   },
@@ -569,7 +579,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 12,
     borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
   },
@@ -608,14 +618,31 @@ const styles = StyleSheet.create({
   nonMemberInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#1f1f1f',
     padding: 12,
     borderRadius: 8,
     marginTop: 8,
   },
   nonMemberInfoText: {
     fontSize: 12,
-    color: theme.colors.textSecondary,
+    color: '#c2c2c2',
+    marginLeft: 8,
+    flex: 1,
+  },
+  errorInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245,158,11,0.12)',
+    borderColor: 'rgba(245,158,11,0.3)',
+    borderWidth: 1,
+    borderRadius: 10,
+    marginHorizontal: 20,
+    marginTop: 20,
+    padding: 10,
+  },
+  errorInlineText: {
+    color: '#f5d38a',
+    fontSize: 12,
     marginLeft: 8,
     flex: 1,
   },

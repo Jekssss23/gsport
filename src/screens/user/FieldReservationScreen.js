@@ -5,15 +5,14 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Image,
   TextInput,
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../config/firebase.js';
+import { serverTimestamp } from 'firebase/firestore';
+import { auth } from '../../config/firebase.js';
 import { API_BASE_URL } from '../../config/api.js';
 import { BookingService } from '../../services/BookingService';
 import { CloudinaryService } from '../../services/CloudinaryService';
@@ -21,11 +20,19 @@ import { theme } from '../../styles/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { getUserFriendlyErrorMessage } from '../../utils/errorMessages';
+import AppModalAlert from '../../components/AppModalAlert';
 
 const { width } = Dimensions.get('window');
 
 const FieldReservationScreen = ({ navigation, route }) => {
-  const { user } = route.params || {};
+  const routeUser = route.params?.user;
+  const user = routeUser || (auth.currentUser ? {
+    uid: auth.currentUser.uid,
+    email: auth.currentUser.email,
+    displayName: auth.currentUser.displayName,
+    phoneNumber: auth.currentUser.phoneNumber,
+  } : null);
 
   const [facilities, setFacilities] = useState([]);
   const [selectedFacility, setSelectedFacility] = useState(null);
@@ -40,6 +47,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
   const [staffMap, setStaffMap] = useState({});
   const [step, setStep] = useState(1);
   const [dateOptions, setDateOptions] = useState([]);
+  const [modalError, setModalError] = useState({ visible: false, title: 'Error', message: '', type: 'warning', onCloseAction: null });
 
   useEffect(() => {
     const dates = [];
@@ -77,9 +85,12 @@ const FieldReservationScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     if (!user) {
-      Alert.alert('Error', 'User not found', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
+      setModalError({
+        visible: true,
+        title: 'User Tidak Ditemukan',
+        message: 'Silakan login ulang.',
+        onCloseAction: () => navigation.goBack(),
+      });
       return;
     }
     loadFacilities();
@@ -101,7 +112,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
       setFacilities(facilities);
     } catch (error) {
       console.error('Error loading facilities:', error);
-      Alert.alert('Error', 'Failed to load facilities');
+      setModalError({ visible: true, title: 'Error', message: getUserFriendlyErrorMessage(error, 'Gagal memuat fasilitas.') });
     } finally {
       setLoadingFacilities(false);
     }
@@ -144,7 +155,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
       setStaffMap(newStaffMap);
     } catch (error) {
       console.error('Error loading slots:', error);
-      Alert.alert('Error', 'Failed to load available slots');
+      setModalError({ visible: true, title: 'Error', message: getUserFriendlyErrorMessage(error, 'Gagal memuat jadwal slot.') });
     } finally {
       setLoadingSlots(false);
     }
@@ -210,11 +221,19 @@ const FieldReservationScreen = ({ navigation, route }) => {
 
   const submitBooking = async () => {
     if (!paymentProof) {
-      Alert.alert('Error', 'Please upload payment proof');
+      setModalError({
+        visible: true,
+        title: 'Bukti Pembayaran Belum Ada',
+        message: 'Silakan upload bukti pembayaran dulu sebelum lanjut booking.',
+      });
       return;
     }
     if (selectedSlots.length === 0) {
-      Alert.alert('Error', 'Please select at least one time slot');
+      setModalError({
+        visible: true,
+        title: 'Pilih Jam Dulu',
+        message: 'Silakan pilih minimal satu slot waktu.',
+      });
       return;
     }
 
@@ -224,7 +243,11 @@ const FieldReservationScreen = ({ navigation, route }) => {
       const allSlotsStillAvailable = selectedSlots.every(slot => currentAvailableSlots.includes(slot));
 
       if (!allSlotsStillAvailable) {
-        Alert.alert('Error', 'Some slots are no longer available. Please select different slots.');
+        setModalError({
+          visible: true,
+          title: 'Slot Sudah Terisi',
+          message: 'Ada jam yang baru saja dibooking orang lain. Pilih slot lain ya.',
+        });
         setLoading(false);
         setStep(3);
         return;
@@ -286,12 +309,20 @@ const FieldReservationScreen = ({ navigation, route }) => {
       }
 
       setLoading(false);
-      Alert.alert('Success', 'Booking submitted successfully!', [
-        { text: 'View History', onPress: () => navigation.navigate('MyReservationHistory') }
-      ]);
+      setModalError({
+        visible: true,
+        title: 'Booking Berhasil',
+        message: 'Reservasi berhasil dibuat. Kamu bisa cek detailnya di My History.',
+        type: 'success',
+        onCloseAction: () => navigation.navigate('MyReservationHistory'),
+      });
     } catch (error) {
       console.error('Booking error:', error);
-      Alert.alert('Error', 'Failed to create booking: ' + error.message);
+      setModalError({
+        visible: true,
+        title: 'Booking Gagal',
+        message: getUserFriendlyErrorMessage(error, 'Gagal membuat booking.'),
+      });
       setLoading(false);
     }
   };
@@ -361,7 +392,14 @@ const FieldReservationScreen = ({ navigation, route }) => {
             ]}
             onPress={() => selectCourt(court)}
           >
-            <Text style={[styles.courtBtnText, selectedCourt?.id === court.id && styles.courtBtnTextActive]}>
+            {court.image_url ? (
+              <Image source={{ uri: court.image_url }} style={styles.courtImage} resizeMode="cover" />
+            ) : (
+              <View style={styles.courtPlaceholder}>
+                <Ionicons name="image-outline" size={20} color="rgba(255,255,255,0.45)" />
+              </View>
+            )}
+            <Text style={[styles.courtBtnText, selectedCourt?.id === court.id && styles.courtBtnTextActive]} numberOfLines={1}>
               {court.name}
             </Text>
           </TouchableOpacity>
@@ -573,6 +611,17 @@ const FieldReservationScreen = ({ navigation, route }) => {
         {step === 2 && renderSlotStep()}
         {step === 3 && renderPaymentStep()}
       </ScrollView>
+      <AppModalAlert
+        visible={modalError.visible}
+        title={modalError.title}
+        message={modalError.message}
+        type={modalError.type || 'warning'}
+        onClose={() => {
+          const action = modalError.onCloseAction;
+          setModalError({ visible: false, title: 'Error', message: '', type: 'warning', onCloseAction: null });
+          if (typeof action === 'function') action();
+        }}
+      />
     </View>
   );
 };
@@ -747,14 +796,17 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   courtBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    width: (width - 75) / 2,
+    height: 126,
     borderRadius: theme.borderRadius.medium,
     backgroundColor: theme.colors.surface,
     marginRight: 10,
     marginBottom: 10,
     borderWidth: 1,
     borderColor: theme.colors.glassBorder,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   courtBtnActive: {
     backgroundColor: theme.colors.primary,
@@ -763,9 +815,19 @@ const styles = StyleSheet.create({
   courtBtnText: {
     color: theme.colors.textSecondary,
     fontWeight: '600',
+    marginBottom: 10,
   },
   courtBtnTextActive: {
     color: 'white',
+  },
+  courtImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  courtPlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#171717',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   slotGrid: {
     flexDirection: 'row',

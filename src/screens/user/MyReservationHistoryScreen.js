@@ -8,6 +8,8 @@ import { BookingService } from '../../services/BookingService';
 import { theme } from '../../styles/theme';
 import RatingScreen from './RatingScreen';
 import CancellationRequestScreen from './CancellationRequestScreen';
+import AppErrorState from '../../components/AppErrorState';
+import { getUserFriendlyErrorMessage } from '../../utils/errorMessages';
 
 const { width } = Dimensions.get('window');
 
@@ -19,6 +21,7 @@ export default function MyReservationHistoryScreen({ navigation }) {
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [showCancellationModal, setShowCancellationModal] = useState(false);
   const [userId, setUserId] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     loadBookings();
@@ -47,6 +50,7 @@ export default function MyReservationHistoryScreen({ navigation }) {
 
   const loadBookings = async () => {
     try {
+      setLoadError('');
       const userId = auth.currentUser?.uid || auth.currentUser?.email;
       if (userId) {
         setUserId(userId);
@@ -55,6 +59,7 @@ export default function MyReservationHistoryScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Error loading bookings:', error);
+      setLoadError(getUserFriendlyErrorMessage(error, 'Gagal memuat riwayat booking.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -137,6 +142,8 @@ export default function MyReservationHistoryScreen({ navigation }) {
   const isBookingCompleted = (booking) => booking.status === 'completed' || booking.status === 'selesai';
   const canRateBooking = (booking) => isBookingCompleted(booking) && (booking.has_rated === 0 || !booking.has_rated);
   const canCancelBooking = (booking) => booking.status === 'confirmed';
+  const canGenerateETicket = (booking) =>
+    ['confirmed', 'completed', 'selesai'].includes(String(booking.status || '').toLowerCase());
 
   if (loading) {
     return (
@@ -167,6 +174,7 @@ export default function MyReservationHistoryScreen({ navigation }) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
         showsVerticalScrollIndicator={false}
       >
+        {loadError ? <AppErrorState title="Gagal Memuat Riwayat" message={loadError} onPress={loadBookings} /> : null}
         {bookings.length === 0 ? (
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconCircle}>
@@ -240,6 +248,12 @@ export default function MyReservationHistoryScreen({ navigation }) {
                   )}
 
                   <View style={styles.actionRow}>
+                    {canGenerateETicket(booking) && (
+                      <TouchableOpacity style={styles.ticketBtn} onPress={() => navigation.navigate('ETicket', { booking })}>
+                        <Ionicons name="ticket-outline" size={18} color="white" />
+                        <Text style={styles.ticketBtnText}>E-ticket</Text>
+                      </TouchableOpacity>
+                    )}
                     {canCancelBooking(booking) && (
                       <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancellationPress(booking)}>
                         <Ionicons name="close-circle-outline" size={18} color={theme.colors.error} />
@@ -478,6 +492,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  ticketBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#222',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: theme.borderRadius.medium,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    marginRight: 10,
+    marginBottom: 8,
+  },
+  ticketBtnText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 6,
   },
   cancelBtn: {
     flexDirection: 'row',

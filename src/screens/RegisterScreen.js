@@ -7,6 +7,7 @@ import { theme } from '../styles/theme.js';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
 
 const { width } = Dimensions.get('window');
 
@@ -48,7 +49,7 @@ export default function RegisterScreen({ navigation }) {
       } else if (error.code === 'auth/invalid-email') {
         errorMessage = 'Invalid email address';
       } else {
-        errorMessage = error.message || 'An unknown error occurred';
+        errorMessage = getUserFriendlyErrorMessage(error, 'Registrasi gagal. Coba lagi.');
       }
       Alert.alert('Registration Error', errorMessage);
     } finally {

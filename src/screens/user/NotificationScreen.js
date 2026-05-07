@@ -15,6 +15,7 @@ import { API_BASE_URL } from '../../config/api';
 import { theme } from '../../styles/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import RatingScreen from './RatingScreen';
+import { BookingService } from '../../services/BookingService';
 
 export default function NotificationScreen({ navigation }) {
   const [notifications, setNotifications] = useState([]);
@@ -53,7 +54,22 @@ export default function NotificationScreen({ navigation }) {
           }
         }));
         
-        setNotifications(notifs);
+        let eventNotifs = [];
+        try {
+          const eventRes = await fetch(`${API_BASE_URL}/notification/my?user_id=${userId}`);
+          const eventJson = await eventRes.json();
+          if (eventRes.ok && eventJson.ok) {
+            eventNotifs = (eventJson.data || []).map((n) => ({
+              id: n.id,
+              type: n.type || 'event',
+              title: n.title || 'Info',
+              message: n.message || '',
+              date: (n.created_at || '').slice(0, 10),
+            }));
+          }
+        } catch (e) {}
+
+        setNotifications([...eventNotifs, ...notifs]);
       }
     } catch (error) {
       console.error("Error fetching notifications:", error);
@@ -103,6 +119,8 @@ export default function NotificationScreen({ navigation }) {
         setSelectedBooking(booking);
         setShowRatingModal(true);
       }
+    } else if (notif.type === 'event') {
+      navigation.navigate('Events');
     }
   };
 
@@ -123,7 +141,7 @@ export default function NotificationScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={[theme.colors.cardBackground, theme.colors.background]}
+        colors={[theme.colors.surface, theme.colors.background]}
         style={styles.header}
       >
         <Text style={styles.headerTitle}>Notifikasi</Text>
@@ -157,7 +175,7 @@ export default function NotificationScreen({ navigation }) {
               activeOpacity={0.7}
             >
               <View style={styles.notifIconContainer}>
-                <Ionicons name="star" size={24} color="#FFD700" />
+                <Ionicons name={notif.type === 'event' ? 'images-outline' : 'star'} size={24} color={notif.type === 'event' ? theme.colors.primary : '#FFD700'} />
               </View>
               <View style={styles.notifTextContainer}>
                 <View style={styles.notifHeader}>
@@ -166,7 +184,7 @@ export default function NotificationScreen({ navigation }) {
                 </View>
                 <Text style={styles.notifMessage}>{notif.message}</Text>
                 <View style={styles.actionPrompt}>
-                  <Text style={styles.actionPromptText}>Ketuk untuk memberi rating</Text>
+                  <Text style={styles.actionPromptText}>{notif.type === 'event' ? 'Ketuk untuk lihat event' : 'Ketuk untuk memberi rating'}</Text>
                   <Ionicons name="chevron-forward" size={14} color={theme.colors.primary} />
                 </View>
               </View>

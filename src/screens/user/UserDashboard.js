@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Dimensions, RefreshControl, Image } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, RefreshControl, Image } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebase.js';
@@ -8,6 +8,9 @@ import { theme } from '../../styles/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
+import { APP_LOGO_PRIMARY } from '../../constants/assets';
+import { getUserFriendlyErrorMessage } from '../../utils/errorMessages';
+import AppModalAlert from '../../components/AppModalAlert';
 
 const { width } = Dimensions.get('window');
 
@@ -15,6 +18,11 @@ export default function UserDashboard({ navigation }) {
   const [userName, setUserName] = useState('');
   const [unratedCount, setUnratedCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [events, setEvents] = useState([]);
+  const [lastEventNotifId, setLastEventNotifId] = useState(null);
+  const [modalState, setModalState] = useState({ visible: false, title: 'Info', message: '', type: 'warning', onCloseAction: null });
+  const eventScrollRef = useRef(null);
+  const eventIndexRef = useRef(0);
 
   const fetchUserData = async () => {
     if (auth.currentUser) {
@@ -25,6 +33,7 @@ export default function UserDashboard({ navigation }) {
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
+        setModalState({ visible: true, title: 'Error', message: getUserFriendlyErrorMessage(error, 'Gagal memuat data user.'), type: 'warning', onCloseAction: null });
       }
     }
   };
@@ -49,13 +58,72 @@ export default function UserDashboard({ navigation }) {
     }
   };
 
+  const getCurrentUserPayload = () =>
+    auth.currentUser
+      ? {
+          uid: auth.currentUser.uid,
+          email: auth.currentUser.email,
+          displayName: auth.currentUser.displayName,
+          phoneNumber: auth.currentUser.phoneNumber,
+        }
+      : null;
+
   useEffect(() => {
     fetchUserData();
     fetchUnratedReservations();
+    fetchEvents();
 
     const interval = setInterval(fetchUnratedReservations, 30000);
-    return () => clearInterval(interval);
+    const notifInterval = setInterval(checkEventNotifications, 15000);
+    checkEventNotifications();
+    return () => {
+      clearInterval(interval);
+      clearInterval(notifInterval);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!events.length || !eventScrollRef.current) return;
+    const timer = setInterval(() => {
+      if (!eventScrollRef.current || events.length === 0) return;
+      eventIndexRef.current = (eventIndexRef.current + 1) % events.length;
+      eventScrollRef.current.scrollTo({ x: eventIndexRef.current * (width - 50 + 10), animated: true });
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [events]);
+
+  const fetchEvents = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/event/list`);
+      const json = await res.json();
+      if (res.ok && json.ok) setEvents(json.data || []);
+    } catch (e) {}
+  };
+
+  const checkEventNotifications = async () => {
+    if (!auth.currentUser) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/notification/my?user_id=${auth.currentUser.uid}`);
+      const json = await res.json();
+      if (!res.ok || !json.ok) return;
+      const latestEvent = (json.data || []).find((n) => n.type === 'event');
+      if (!latestEvent) return;
+      if (!lastEventNotifId) {
+        setLastEventNotifId(latestEvent.id);
+        return;
+      }
+      if (latestEvent.id !== lastEventNotifId) {
+        setLastEventNotifId(latestEvent.id);
+        setModalState({
+          visible: true,
+          title: latestEvent.title || 'Event Baru',
+          message: latestEvent.message || 'Ada event baru dari G Sports Center.',
+          type: 'success',
+          onCloseAction: () => navigation.navigate('Notifications'),
+        });
+      }
+    } catch (e) {}
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -64,18 +132,13 @@ export default function UserDashboard({ navigation }) {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Logout", 
-          onPress: () => signOut(auth).catch(error => console.error('Error signing out: ', error)),
-          style: 'destructive'
-        }
-      ]
-    );
+    setModalState({
+      visible: true,
+      title: 'Logout',
+      message: 'Are you sure you want to logout?',
+      type: 'warning',
+      onCloseAction: () => signOut(auth).catch(error => console.error('Error signing out: ', error)),
+    });
   };
 
   const ActionCard = ({ title, subtitle, icon, route, colors, isWide = false }) => (
@@ -84,12 +147,7 @@ export default function UserDashboard({ navigation }) {
       onPress={() => {
         if (route === 'FieldReservation') {
           navigation.navigate(route, { 
-            user: auth.currentUser ? {
-              uid: auth.currentUser.uid,
-              email: auth.currentUser.email,
-              displayName: auth.currentUser.displayName,
-              phoneNumber: auth.currentUser.phoneNumber,
-            } : null
+            user: getCurrentUserPayload()
           });
         } else {
           navigation.navigate(route);
@@ -144,6 +202,12 @@ export default function UserDashboard({ navigation }) {
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity 
+              onPress={() => navigation.navigate('Profile')}
+              style={styles.iconButton}
+            >
+              <Ionicons name="person-circle-outline" size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity 
               onPress={() => navigation.navigate('Notifications')} 
               style={styles.iconButton}
             >
@@ -175,18 +239,49 @@ export default function UserDashboard({ navigation }) {
             style={styles.heroGradient}
           >
             <View style={styles.heroInfo}>
-              <Text style={styles.heroTag}>GSC PREMIUM</Text>
+              <Image source={APP_LOGO_PRIMARY} style={styles.heroLogo} resizeMode="contain" />
               <Text style={styles.heroTitle}>Book Your Perfect Court</Text>
               <Text style={styles.heroDesc}>High-end facilities for your sports lifestyle</Text>
               <TouchableOpacity 
                 style={styles.heroButton}
-                onPress={() => navigation.navigate('FieldReservation')}
+                onPress={() => navigation.navigate('FieldReservation', { user: getCurrentUserPayload() })}
               >
                 <Text style={styles.heroButtonText}>Book Now</Text>
               </TouchableOpacity>
             </View>
             <Ionicons name="tennisball" size={100} color="rgba(255,255,255,0.05)" style={styles.heroBgIcon} />
           </LinearGradient>
+        </View>
+
+        <View style={styles.eventSection}>
+          <Text style={styles.eventHeadText}>EVENT</Text>
+          <ScrollView ref={eventScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+            {(events.length ? events : [{ id: 'empty' }]).map((ev) => (
+              <TouchableOpacity
+                key={ev.id}
+                activeOpacity={0.85}
+                style={styles.eventBanner}
+                onPress={() => navigation.navigate('Events')}
+              >
+                {ev.image_url ? (
+                  <Image source={{ uri: ev.image_url }} style={styles.eventImage} />
+                ) : (
+                  <LinearGradient colors={['#2a0000', '#0f0f0f']} style={styles.eventGradient}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.eventTitle}>EVENT G SPORTS CENTER</Text>
+                      <Text style={styles.eventSub}>Belum ada event aktif saat ini.</Text>
+                    </View>
+                  </LinearGradient>
+                )}
+                {ev.image_url ? (
+                  <LinearGradient colors={['transparent', 'rgba(0,0,0,0.75)']} style={styles.eventOverlay}>
+                    <Text style={styles.eventTitle}>{ev.name}</Text>
+                    <Text style={styles.eventSub}>{ev.start_date} - {ev.end_date}</Text>
+                  </LinearGradient>
+                ) : null}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
         <Text style={styles.sectionHeader}>Main Services</Text>
@@ -238,6 +333,17 @@ export default function UserDashboard({ navigation }) {
           </View>
         </View>
       </ScrollView>
+      <AppModalAlert
+        visible={modalState.visible}
+        title={modalState.title}
+        message={modalState.message}
+        type={modalState.type}
+        onClose={() => {
+          const action = modalState.onCloseAction;
+          setModalState({ visible: false, title: 'Info', message: '', type: 'warning', onCloseAction: null });
+          if (typeof action === 'function') action();
+        }}
+      />
     </View>
   );
 }
@@ -261,6 +367,8 @@ const styles = StyleSheet.create({
   profileSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
   },
   avatarContainer: {
     width: 48,
@@ -289,21 +397,23 @@ const styles = StyleSheet.create({
   },
   userName: {
     color: theme.colors.text,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
     letterSpacing: 0.5,
+    maxWidth: width * 0.34,
   },
   headerActions: {
     flexDirection: 'row',
+    alignItems: 'center',
   },
   iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: theme.colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 12,
+    marginLeft: 8,
     borderWidth: 1,
     borderColor: theme.colors.glassBorder,
   },
@@ -353,6 +463,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 2,
+    marginBottom: 8,
+  },
+  heroLogo: {
+    width: 120,
+    height: 36,
     marginBottom: 8,
   },
   heroTitle: {
@@ -450,6 +565,56 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.glassBorder,
     alignItems: 'center',
+  },
+  eventSection: {
+    marginBottom: 18,
+  },
+  eventHeadText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 8,
+    letterSpacing: 1,
+  },
+  eventBanner: {
+    borderRadius: theme.borderRadius.large,
+    overflow: 'hidden',
+    marginBottom: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(230,0,0,0.25)',
+    width: width - 50,
+    height: 165,
+    marginRight: 10,
+  },
+  eventImage: {
+    width: '100%',
+    height: '100%',
+  },
+  eventGradient: {
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    height: '100%',
+  },
+  eventOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 12,
+  },
+  eventTitle: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 4,
+    letterSpacing: 1,
+  },
+  eventSub: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
   },
   infoIconContainer: {
     width: 44,

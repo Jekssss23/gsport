@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { auth, db } from '../../config/firebase';
 import { collection, addDoc, doc, getDoc, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { theme } from '../../styles/theme';
+import { getUserFriendlyErrorMessage } from '../../utils/errorMessages';
 
 export default function AttendanceScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
@@ -32,6 +33,7 @@ export default function AttendanceScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
+      Alert.alert('Error', getUserFriendlyErrorMessage(error, 'Gagal memuat data user.'));
     }
   };
 
@@ -43,6 +45,7 @@ export default function AttendanceScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Error fetching settings:', error);
+      Alert.alert('Error', getUserFriendlyErrorMessage(error, 'Gagal memuat pengaturan absensi.'));
     }
   };
 
@@ -60,6 +63,7 @@ export default function AttendanceScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Error checking attendance:', error);
+      Alert.alert('Error', getUserFriendlyErrorMessage(error, 'Gagal mengecek absensi hari ini.'));
     }
   };
 
@@ -167,7 +171,7 @@ export default function AttendanceScreen({ navigation }) {
       Alert.alert('Success', 'Check in successful');
     } catch (error) {
       console.error('Error check in:', error);
-      Alert.alert('Error', 'Failed to check in');
+      Alert.alert('Error', getUserFriendlyErrorMessage(error, 'Gagal check-in.'));
     } finally {
       setLoading(false);
     }
@@ -198,7 +202,7 @@ export default function AttendanceScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Error check out:', error);
-      Alert.alert('Error', 'Failed to check out');
+      Alert.alert('Error', getUserFriendlyErrorMessage(error, 'Gagal check-out.'));
     } finally {
       setLoading(false);
     }

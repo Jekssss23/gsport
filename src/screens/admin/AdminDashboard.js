@@ -1,16 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebase.js';
 import { theme } from '../../styles/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import AppModalAlert from '../../components/AppModalAlert';
+import { API_BASE_URL } from '../../config/api';
 
 const { width } = Dimensions.get('window');
 
 export default function AdminDashboard({ navigation }) {
   const [adminName, setAdminName] = useState('');
+  const [logoutPopup, setLogoutPopup] = useState(false);
+  const [events, setEvents] = useState([]);
 
   useEffect(() => {
     const fetchAdminData = async () => {
@@ -26,21 +30,19 @@ export default function AdminDashboard({ navigation }) {
       }
     };
     fetchAdminData();
+    fetchEvents();
   }, []);
 
+  const fetchEvents = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/event/list`);
+      const json = await res.json();
+      if (res.ok && json.ok) setEvents(json.data || []);
+    } catch (e) {}
+  };
+
   const handleLogout = () => {
-    Alert.alert(
-      "Keluar",
-      "Apakah Anda yakin ingin keluar?",
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Keluar",
-          onPress: () => signOut(auth).catch(error => console.error('Error signing out: ', error)),
-          style: 'destructive'
-        }
-      ]
-    );
+    setLogoutPopup(true);
   };
 
   const AdminCard = ({ title, icon, route, gradientColors, description }) => (
@@ -105,7 +107,26 @@ export default function AdminDashboard({ navigation }) {
           route="RatingMe"
           gradientColors={['#B22222', '#8B0000']}
         />
+
+        <TouchableOpacity onPress={() => navigation.navigate('Events')} style={styles.eventBox} activeOpacity={0.85}>
+          <LinearGradient colors={['#2a0000', '#0f0f0f']} style={styles.eventGradient}>
+            <Text style={styles.eventLabel}>EVENT</Text>
+            <Text style={styles.eventName}>{events[0]?.name || 'Belum ada event aktif'}</Text>
+            <Text style={styles.eventDesc}>Tap untuk lihat slideshow event</Text>
+          </LinearGradient>
+        </TouchableOpacity>
       </ScrollView>
+      <AppModalAlert
+        visible={logoutPopup}
+        title="Keluar"
+        message="Apakah kamu yakin ingin keluar?"
+        type="warning"
+        buttonLabel="Ya, Keluar"
+        onClose={() => {
+          setLogoutPopup(false);
+          signOut(auth).catch(error => console.error('Error signing out: ', error));
+        }}
+      />
     </View>
   );
 }
@@ -122,7 +143,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
-    backgroundColor: theme.colors.cardBackground,
+    backgroundColor: theme.colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,0,0,0.2)',
   },
@@ -196,6 +217,33 @@ const styles = StyleSheet.create({
   },
   arrowIcon: {
     marginLeft: 10,
+  },
+  eventBox: {
+    marginTop: 2,
+    borderRadius: 15,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,0,0,0.25)',
+  },
+  eventGradient: {
+    padding: 16,
+  },
+  eventLabel: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginBottom: 6,
+  },
+  eventName: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 5,
+  },
+  eventDesc: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
   },
   statsCard: {
     marginTop: 20,

@@ -3,6 +3,7 @@ import { View, StyleSheet, Dimensions, TouchableOpacity, Text, Animated, Image }
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../styles/theme';
+import { APP_LOGO_PRIMARY } from '../constants/assets';
 
 const { width, height } = Dimensions.get('window');
 
@@ -44,6 +45,7 @@ export default function LandingScreen({ navigation }) {
       
       {/* Visual content */}
       <View style={styles.content}>
+        <View style={styles.glow} />
         <Animated.View style={[
           styles.logoContainer,
           {
@@ -51,9 +53,7 @@ export default function LandingScreen({ navigation }) {
             transform: [{ scale: scaleAnim }]
           }
         ]}>
-          <View style={styles.logoCircle}>
-             <Text style={styles.logoText}>GSC</Text>
-          </View>
+          <Image source={APP_LOGO_PRIMARY} style={styles.logoImage} resizeMode="contain" />
         </Animated.View>
 
         <Animated.View style={[
@@ -66,6 +66,7 @@ export default function LandingScreen({ navigation }) {
           <Text style={styles.title}>G SPORTS CENTER</Text>
           <View style={styles.separator} />
           <Text style={styles.subtitle}>PREMIUM SPORTS EXPERIENCE</Text>
+          <Text style={styles.subtitle2}>Futsal • Badminton • Pickleball • Class</Text>
         </Animated.View>
       </View>
 
@@ -108,29 +109,16 @@ const styles = StyleSheet.create({
     marginBottom: 40,
     alignItems: 'center',
   },
-  logoCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 4,
-    borderColor: 'rgba(255,255,255,0.2)',
-    ...theme.shadows.heavy,
-  },
-  logoText: {
-    color: 'white',
-    fontSize: 40,
-    fontWeight: '900',
-    letterSpacing: 2,
+  logoImage: {
+    width: 210,
+    height: 90,
   },
   textContainer: {
     alignItems: 'center',
   },
   title: {
     color: 'white',
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '800',
     textAlign: 'center',
     letterSpacing: 4,
@@ -148,6 +136,21 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     textAlign: 'center',
     textTransform: 'uppercase',
+  },
+  subtitle2: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 11,
+    letterSpacing: 2,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  glow: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(230,0,0,0.12)',
+    top: '26%',
   },
   touchableOverlay: {
     position: 'absolute',

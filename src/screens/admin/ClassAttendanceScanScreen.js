@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
@@ -16,6 +15,7 @@ import { ClassScheduleService } from '../../services/ClassScheduleService';
 import { theme } from '../../styles/theme';
 import { db } from '../../config/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import AppModalAlert from '../../components/AppModalAlert';
 
 export default function AdminClassAttendanceScanScreen({ navigation }) {
   const [permission, requestPermission] = useCameraPermissions();
@@ -28,6 +28,17 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
   const [gscPackageId, setGscPackageId] = useState(null);
   const [gscPackageData, setGscPackageData] = useState(null);
   const [hoursToDeduct, setHoursToDeduct] = useState('');
+  const [modalState, setModalState] = useState({
+    visible: false,
+    title: 'Info',
+    message: '',
+    type: 'warning',
+    onCloseAction: null,
+  });
+
+  const showModal = ({ title, message, type = 'warning', onCloseAction = null }) => {
+    setModalState({ visible: true, title, message, type, onCloseAction });
+  };
 
   const onBarcodeScanned = useCallback(
     async ({ data }) => {
@@ -42,25 +53,24 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
           const msg =
             result.message ||
             (result.data?.member_name ? `${result.data.member_name} — OK` : 'OK');
-          Alert.alert(title, msg, [
-            {
-              text: 'Scan lagi',
-              onPress: () => {
-                setScanned(false);
-                setBusy(false);
-              },
+          showModal({
+            title,
+            message: msg,
+            type: result.already ? 'warning' : 'success',
+            onCloseAction: () => {
+              setScanned(false);
+              setBusy(false);
             },
-            {
-              text: 'Tutup',
-              style: 'cancel',
-              onPress: () => navigation.goBack(),
-            },
-          ]);
+          });
         } catch (e) {
-          Alert.alert('Tidak bisa absen', e.message || String(e), [
-            { text: 'Coba lagi', onPress: () => { setScanned(false); setBusy(false); } },
-            { text: 'Tutup', style: 'cancel', onPress: () => navigation.goBack() },
-          ]);
+          showModal({
+            title: 'Tidak Bisa Absen',
+            message: e.message || String(e),
+            onCloseAction: () => {
+              setScanned(false);
+              setBusy(false);
+            },
+          });
         } finally {
           setBusy(false);
         }
@@ -72,9 +82,14 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
           if (packageSnap.exists()) {
             const pkgData = packageSnap.data();
             if (pkgData.remainingHours <= 0) {
-              Alert.alert('Gagal', 'Paket GSC ini sudah habis (0 jam).', [
-                { text: 'OK', onPress: () => { setScanned(false); setBusy(false); } }
-              ]);
+              showModal({
+                title: 'Paket Habis',
+                message: 'Paket GSC ini sudah habis (0 jam).',
+                onCloseAction: () => {
+                  setScanned(false);
+                  setBusy(false);
+                },
+              });
             } else {
               setGscPackageId(data);
               setGscPackageData(pkgData);
@@ -83,14 +98,24 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
               setBusy(false); // Modal takes over
             }
           } else {
-             Alert.alert('Tidak ditemukan', 'QR Code bukan Paket GSC yang valid.', [
-              { text: 'Coba lagi', onPress: () => { setScanned(false); setBusy(false); } }
-            ]);
+             showModal({
+              title: 'Tidak Ditemukan',
+              message: 'QR Code bukan paket GSC yang valid.',
+              onCloseAction: () => {
+                setScanned(false);
+                setBusy(false);
+              },
+            });
           }
         } catch (e) {
-          Alert.alert('Error', 'Gagal memproses QR Code GSC.', [
-            { text: 'Coba lagi', onPress: () => { setScanned(false); setBusy(false); } }
-          ]);
+          showModal({
+            title: 'Error',
+            message: 'Gagal memproses QR Code GSC.',
+            onCloseAction: () => {
+              setScanned(false);
+              setBusy(false);
+            },
+          });
           setBusy(false);
         }
       }
@@ -101,11 +126,11 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
   const handleDeductHours = async () => {
     const hours = parseInt(hoursToDeduct);
     if (isNaN(hours) || hours <= 0) {
-      Alert.alert('Invalid', 'Masukkan angka jam yang valid (minimal 1).');
+      showModal({ title: 'Input Tidak Valid', message: 'Masukkan angka jam yang valid (minimal 1).' });
       return;
     }
     if (hours > gscPackageData.remainingHours) {
-      Alert.alert('Invalid', `Jam tidak cukup. Sisa jam: ${gscPackageData.remainingHours}`);
+      showModal({ title: 'Jam Tidak Cukup', message: `Sisa jam: ${gscPackageData.remainingHours}` });
       return;
     }
 
@@ -117,12 +142,19 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
       });
       
       setGscModalVisible(false);
-      Alert.alert('Berhasil', `Berhasil memotong ${hours} jam. Sisa jam sekarang: ${gscPackageData.remainingHours - hours}.`, [
-        { text: 'Scan lagi', onPress: () => { setScanned(false); setBusy(false); setGscPackageId(null); setGscPackageData(null); } },
-        { text: 'Selesai', style: 'cancel', onPress: () => navigation.goBack() }
-      ]);
+      showModal({
+        title: 'Berhasil',
+        message: `Berhasil memotong ${hours} jam. Sisa: ${gscPackageData.remainingHours - hours}.`,
+        type: 'success',
+        onCloseAction: () => {
+          setScanned(false);
+          setBusy(false);
+          setGscPackageId(null);
+          setGscPackageData(null);
+        },
+      });
     } catch (e) {
-      Alert.alert('Error', 'Gagal menyimpan potongan jam.');
+      showModal({ title: 'Error', message: 'Gagal menyimpan potongan jam.' });
       setBusy(false);
     }
   };
@@ -253,6 +285,17 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+      <AppModalAlert
+        visible={modalState.visible}
+        title={modalState.title}
+        message={modalState.message}
+        type={modalState.type}
+        onClose={() => {
+          const action = modalState.onCloseAction;
+          setModalState({ visible: false, title: 'Info', message: '', type: 'warning', onCloseAction: null });
+          if (typeof action === 'function') action();
+        }}
+      />
 
     </View>
   );

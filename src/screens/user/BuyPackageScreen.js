@@ -8,6 +8,8 @@ import { auth, db } from '../../config/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { theme } from '../../styles/theme';
 import { StatusBar } from 'expo-status-bar';
+import AppModalAlert from '../../components/AppModalAlert';
+import { getUserFriendlyErrorMessage } from '../../utils/errorMessages';
 
 const { width } = Dimensions.get('window');
 
@@ -29,14 +31,15 @@ export default function BuyPackageScreen({ navigation }) {
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [paymentProof, setPaymentProof] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [modalError, setModalError] = useState({ visible: false, title: 'Error', message: '' });
 
   const handleNext = () => {
     if (!selectedSport) {
-      Alert.alert('Error', 'Please select a sport first');
+      setModalError({ visible: true, title: 'Pilih Olahraga', message: 'Silakan pilih olahraga dulu.' });
       return;
     }
     if (!selectedPackage) {
-      Alert.alert('Error', 'Please select a package');
+      setModalError({ visible: true, title: 'Pilih Paket', message: 'Silakan pilih paket terlebih dahulu.' });
       return;
     }
     setStep(2);
@@ -45,7 +48,7 @@ export default function BuyPackageScreen({ navigation }) {
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Error', 'Sorry, we need camera roll permissions to make this work!');
+      setModalError({ visible: true, title: 'Akses Ditolak', message: 'Izin galeri dibutuhkan untuk upload bukti pembayaran.' });
       return;
     }
 
@@ -72,7 +75,7 @@ export default function BuyPackageScreen({ navigation }) {
 
   const handleSubmit = async () => {
     if (!paymentProof) {
-      Alert.alert('Error', 'Please upload payment proof');
+      setModalError({ visible: true, title: 'Bukti Pembayaran Belum Ada', message: 'Silakan upload screenshot pembayaran dulu.' });
       return;
     }
 
@@ -137,7 +140,7 @@ export default function BuyPackageScreen({ navigation }) {
       );
     } catch (error) {
       console.error('Error buying package:', error);
-      Alert.alert('Error', 'Failed to process purchase: ' + error.message);
+      setModalError({ visible: true, title: 'Pembelian Gagal', message: getUserFriendlyErrorMessage(error, 'Gagal memproses pembelian paket.') });
     } finally {
       setLoading(false);
     }
@@ -207,7 +210,7 @@ export default function BuyPackageScreen({ navigation }) {
                   activeOpacity={0.8}
                 >
                   <LinearGradient
-                    colors={selectedPackage?.id === pkg.id ? ['#10b981', '#059669'] : ['#1A1A1A', '#0F0F0F']}
+                    colors={selectedPackage?.id === pkg.id ? ['#10b981', '#059669'] : ['#242424', '#151515']}
                     style={styles.pkgGradient}
                   >
                     <View style={styles.pkgInfoLeft}>
@@ -316,6 +319,12 @@ export default function BuyPackageScreen({ navigation }) {
           </View>
         )}
       </ScrollView>
+      <AppModalAlert
+        visible={modalError.visible}
+        title={modalError.title}
+        message={modalError.message}
+        onClose={() => setModalError({ visible: false, title: 'Error', message: '' })}
+      />
     </View>
   );
 }
@@ -417,6 +426,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.large,
     overflow: 'hidden',
     marginBottom: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
     ...theme.shadows.medium,
   },
   pkgCardActive: {
@@ -439,7 +450,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   pkgDetailsText: {
-    color: theme.colors.textSecondary,
+    color: 'rgba(255,255,255,0.78)',
     fontSize: 13,
   },
   pkgInfoRight: {

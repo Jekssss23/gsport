@@ -7,6 +7,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { theme } from '../../styles/theme';
 import { attendanceAPI, getCurrentUserData } from '../../api/attendance';
 import { CloudinaryService } from '../../services/CloudinaryService';
+import { getUserFriendlyErrorMessage } from '../../utils/errorMessages';
+import AppModalAlert from '../../components/AppModalAlert';
 
 const { width } = Dimensions.get('window');
 
@@ -21,6 +23,11 @@ export default function AttendanceScreen() {
   const [loading, setLoading] = useState(true);
   const [selfieUri, setSelfieUri] = useState(null);
   const [selfieUploading, setSelfieUploading] = useState(false);
+  const [modalError, setModalError] = useState({ visible: false, title: 'Info', message: '', type: 'warning' });
+
+  const showModal = (title, message, type = 'warning') => {
+    setModalError({ visible: true, title, message, type });
+  };
 
   // Animation values
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -38,19 +45,15 @@ export default function AttendanceScreen() {
           console.log('Attendance settings loaded:', response.data);
         } else {
           console.log('No attendance settings found');
-          Alert.alert('Error', 'Pengaturan lokasi absensi belum diatur di website admin');
+          showModal('Pengaturan Belum Ada', 'Pengaturan lokasi absensi belum diatur di website admin.');
         }
       } catch (error) {
         console.error('Error fetching attendance settings:', error);
         
         if (error.message.includes('Network request failed')) {
-          Alert.alert(
-            'Koneksi Error',
-            'Tidak dapat terhubung ke server. Pastikan:\n1. WiFi/Internet aktif\n2. Server berjalan di IP yang benar\n3. Firewall tidak memblokir koneksi',
-            [{ text: 'OK' }]
-          );
+          showModal('Koneksi Error', getUserFriendlyErrorMessage(error, 'Tidak dapat terhubung ke server. Cek koneksi internet lalu coba lagi.'));
         } else {
-          Alert.alert('Error', 'Gagal mengambil pengaturan lokasi: ' + error.message);
+          showModal('Error', getUserFriendlyErrorMessage(error, 'Gagal mengambil pengaturan lokasi.'));
         }
       } finally {
         setLoading(false);
@@ -88,11 +91,7 @@ export default function AttendanceScreen() {
 
         if (status !== 'granted') {
           setLocationStatus('denied');
-          Alert.alert(
-            'Izin Lokasi Diperlukan',
-            'Aplikasi memerlukan izin lokasi untuk absensi. Silakan aktifkan izin lokasi di pengaturan.',
-            [{ text: 'OK' }]
-          );
+          showModal('Izin Lokasi Diperlukan', 'Aplikasi memerlukan izin lokasi untuk absensi. Aktifkan izin lokasi di pengaturan.');
           return;
         }
 
@@ -112,10 +111,7 @@ export default function AttendanceScreen() {
         });
 
         if (location.mocked) {
-          Alert.alert(
-            'Peringatan Keamanan', 
-            'Terdeteksi penggunaan Fake GPS! Status absen Anda akan tercatat sebagai Fake GPS.'
-          );
+          showModal('Peringatan Keamanan', 'Terdeteksi penggunaan Fake GPS! Status absen akan tercatat sebagai Fake GPS.');
         }
 
         console.log('Current location:', location.coords);
@@ -126,23 +122,11 @@ export default function AttendanceScreen() {
         
         // More specific error handling
         if (error.message.includes('Location services are disabled')) {
-          Alert.alert(
-            'GPS Tidak Aktif',
-            'GPS tidak aktif. Silakan aktifkan GPS di pengaturan perangkat.',
-            [{ text: 'OK' }]
-          );
+          showModal('GPS Tidak Aktif', 'GPS tidak aktif. Silakan aktifkan GPS di pengaturan perangkat.');
         } else if (error.message.includes('Location request timed out')) {
-          Alert.alert(
-            'Timeout',
-            'Gagal mendapatkan lokasi dalam waktu yang ditentukan. Silakan coba lagi.',
-            [{ text: 'OK' }]
-          );
+          showModal('Timeout', 'Gagal mendapatkan lokasi dalam waktu yang ditentukan. Silakan coba lagi.');
         } else {
-          Alert.alert(
-            'Error',
-            'Gagal mendapatkan lokasi. Pastikan GPS aktif dan sinyal baik.',
-            [{ text: 'OK' }]
-          );
+          showModal('Error', 'Gagal mendapatkan lokasi. Pastikan GPS aktif dan sinyal baik.');
         }
       }
     };
@@ -229,21 +213,16 @@ export default function AttendanceScreen() {
 
     // Check if within radius
     if (!isWithinRadius) {
-      Alert.alert(
+      showModal(
         'Lokasi Tidak Valid',
-        `Anda berada di luar radius absensi. Jarak Anda: ${Math.round(distance)}m (Max: ${attendanceSettings.radius_meters}m). \n\nSilakan mendekat ke lokasi yang telah ditentukan.`,
-        [{ text: 'OK' }]
+        `Anda berada di luar radius absensi. Jarak: ${Math.round(distance)}m (Max: ${attendanceSettings.radius_meters}m).`
       );
       return;
     }
 
     // Check location status
     if (locationStatus !== 'granted') {
-      Alert.alert(
-        'Lokasi Tidak Tersedia',
-        'Tidak dapat memverifikasi lokasi Anda. Pastikan GPS aktif dan izin lokasi diberikan.',
-        [{ text: 'OK' }]
-      );
+      showModal('Lokasi Tidak Tersedia', 'Tidak dapat memverifikasi lokasi. Pastikan GPS aktif dan izin lokasi diberikan.');
       return;
     }
 
@@ -256,7 +235,7 @@ export default function AttendanceScreen() {
       }
 
       if (!selfieUri) {
-        Alert.alert('Selfie Wajib', 'Ambil selfie dulu (ikon kamera) sebelum absen.');
+        showModal('Selfie Wajib', 'Ambil selfie dulu (ikon kamera) sebelum absen.');
         return;
       }
 
@@ -313,7 +292,7 @@ export default function AttendanceScreen() {
         console.log('Attendance recorded successfully:', response.data);
       } else {
         // Handle explicit server failures cleanly without throwing an exception
-        Alert.alert('Informasi', response.message || 'Gagal memproses absensi.');
+        showModal('Informasi', response.message || 'Gagal memproses absensi.');
         
         // Auto-sync UI if server says they already checked in independently of frontend state
         if (response.message && response.message.toLowerCase().includes('sudah melakukan check-in')) {
@@ -322,7 +301,7 @@ export default function AttendanceScreen() {
       }
     } catch (error) {
       console.error('Error saving attendance:', error);
-      Alert.alert('Koneksi Gagal', 'Gagal menyambung ke server. ' + (error.message || 'Terjadi kesalahan sistem.'));
+      showModal('Koneksi Gagal', getUserFriendlyErrorMessage(error, 'Gagal memproses absensi. Coba lagi.'));
     } finally {
       setSelfieUploading(false);
     }
@@ -350,15 +329,12 @@ export default function AttendanceScreen() {
       });
 
       if (location.mocked) {
-        Alert.alert(
-          'Peringatan Keamanan',
-          'Terdeteksi penggunaan Fake GPS! Status absen Anda akan tercatat sebagai Fake GPS.'
-        );
+        showModal('Peringatan Keamanan', 'Terdeteksi penggunaan Fake GPS! Status absen akan tercatat sebagai Fake GPS.');
       }
 
-      Alert.alert('Success', 'Lokasi berhasil diperbarui!');
+      showModal('Berhasil', 'Lokasi berhasil diperbarui!', 'success');
     } catch (error) {
-      Alert.alert('Error', 'Gagal memperbarui lokasi');
+      showModal('Error', 'Gagal memperbarui lokasi');
     } finally {
       setLoading(false);
     }
@@ -368,7 +344,7 @@ export default function AttendanceScreen() {
     try {
       const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
       if (cameraStatus !== 'granted') {
-        Alert.alert('Akses Ditolak', 'Akses kamera dibutuhkan untuk mengambil selfie absensi.');
+        showModal('Akses Ditolak', 'Akses kamera dibutuhkan untuk mengambil selfie absensi.');
         return;
       }
 
@@ -383,13 +359,13 @@ export default function AttendanceScreen() {
 
       const uri = imageResult.assets?.[0]?.uri;
       if (!uri) {
-        Alert.alert('Error', 'Gagal mengambil foto.');
+        showModal('Error', 'Gagal mengambil foto.');
         return;
       }
       setSelfieUri(uri);
     } catch (e) {
       console.error(e);
-      Alert.alert('Error', 'Gagal membuka kamera.');
+      showModal('Error', 'Gagal membuka kamera.');
     }
   };
 
@@ -571,6 +547,13 @@ export default function AttendanceScreen() {
 
         {/* isAttended State has no reset button anymore because 1 day = 1 attendance */}
       </ScrollView>
+      <AppModalAlert
+        visible={modalError.visible}
+        title={modalError.title}
+        message={modalError.message}
+        type={modalError.type}
+        onClose={() => setModalError({ visible: false, title: 'Info', message: '', type: 'warning' })}
+      />
     </View>
   );
 }

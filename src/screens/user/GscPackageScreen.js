@@ -47,7 +47,7 @@ export default function GscPackageScreen({ navigation }) {
           <View style={styles.cardHeader}>
             <View>
               <Text style={styles.sportType}>{item.sportType.toUpperCase()}</Text>
-              <Text style={styles.packageId}>ID: {item.id.substring(0, 8).toUpperCase()}</Text>
+              <Text style={styles.packageId}>Kode paket disembunyikan untuk privasi</Text>
             </View>
             <View style={[styles.statusBadge, { backgroundColor: item.status === 'active' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)' }]}>
               <View style={[styles.statusDot, { backgroundColor: item.status === 'active' ? '#10b981' : '#f59e0b' }]} />

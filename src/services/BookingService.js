@@ -294,6 +294,7 @@ export class BookingService {
 
       return (json.data || []).map((r) => ({
         id: Number(r.id),
+        reservationCode: r.reservation_code,
         userId: r.firebase_uid,
         userName: r.user_name,
         userPhone: r.user_phone,
@@ -311,6 +312,7 @@ export class BookingService {
         status: r.status,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
+        assignedStaffName: r.assigned_staff_name || null,
       }));
     } catch (error) {
       console.error('Error fetching user bookings:', error);

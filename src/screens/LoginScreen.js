@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Dimensions, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Dimensions, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../config/firebase.js';
@@ -7,6 +7,8 @@ import { theme } from '../styles/theme.js';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { APP_LOGO_PRIMARY } from '../constants/assets';
+import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
 
 const { width } = Dimensions.get('window');
 
@@ -56,7 +58,7 @@ export default function LoginScreen({ navigation }) {
         return;
       }
     } catch (error) {
-      Alert.alert('Login Error', error.message);
+      Alert.alert('Login Error', getUserFriendlyErrorMessage(error, 'Login gagal. Cek email/nomor HP dan password.'));
     } finally {
       setLoading(false);
     }
@@ -76,9 +78,7 @@ export default function LoginScreen({ navigation }) {
       >
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <View style={styles.logoCircle}>
-              <Text style={styles.logoText}>GSC</Text>
-            </View>
+            <Image source={APP_LOGO_PRIMARY} style={styles.logoImage} resizeMode="contain" />
             <Text style={styles.welcomeTitle}>Welcome Back</Text>
             <Text style={styles.welcomeSubtitle}>Sign in to continue your journey</Text>
           </View>
@@ -170,20 +170,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 50,
   },
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+  logoImage: {
+    width: 140,
+    height: 60,
     marginBottom: 20,
-    ...theme.shadows.medium,
-  },
-  logoText: {
-    color: 'white',
-    fontSize: 24,
-    fontWeight: '900',
   },
   welcomeTitle: {
     fontSize: 28,
