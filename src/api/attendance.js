@@ -14,6 +14,7 @@ const apiCall = async (endpoint, method = 'GET', data = null) => {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'ngrok-skip-browser-warning': '69420'
       },
       timeout: 10000, // 10 seconds timeout
     };
@@ -23,18 +24,18 @@ const apiCall = async (endpoint, method = 'GET', data = null) => {
     }
 
     console.log('API Call:', method, `${ATTENDANCE_API_URL}${endpoint}`, data ? 'with data:' : '', data);
-    
+
     const response = await fetch(`${ATTENDANCE_API_URL}${endpoint}`, config);
-    
+
     console.log('API Response Status:', response.status);
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
     const result = await response.json();
     console.log('API Response Data:', result);
-    
+
     return result;
   } catch (error) {
     console.error('API Error:', error);

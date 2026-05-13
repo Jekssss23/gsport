@@ -50,4 +50,16 @@ function resolveApiBaseUrl() {
   return `${protocol}://${host}${PROJECT_API_PATH}`;
 }
 
-export const API_BASE_URL = resolveApiBaseUrl();
+// export const API_BASE_URL = resolveApiBaseUrl();
+export const API_BASE_URL = 'https://winnings-eternal-defile.ngrok-free.dev/g_sports_center_admin_robby/api';
+
+// GLOBAL FETCH PATCH UNTUK NGROK:
+// Bypass ngrok browser warning secara global agar tidak perlu edit puluhan file
+const originalFetch = global.fetch;
+global.fetch = async (url, options = {}) => {
+  options.headers = {
+    ...options.headers,
+    'ngrok-skip-browser-warning': '69420'
+  };
+  return originalFetch(url, options);
+};
