@@ -14,7 +14,6 @@ const apiCall = async (endpoint, method = 'GET', data = null) => {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'ngrok-skip-browser-warning': '69420'
       },
       timeout: 10000, // 10 seconds timeout
     };
@@ -62,12 +61,11 @@ export const attendanceAPI = {
   saveAttendance: async (userData, locationData) => {
     const attendanceData = {
       employee_uid: userData.uid,
-      employee_id: userData.employeeId || userData.uid,
+      employee_id: userData.employeeId || userData.sqlEmployeeId || userData.uid,
       employee_name: userData.name || userData.displayName,
       employee_email: userData.email,
       latitude: locationData.latitude,
       longitude: locationData.longitude,
-      status: locationData.status,
       // mock/fake gps flag for server-side consistency
       is_mocked: locationData.is_mocked === true,
 
@@ -85,7 +83,7 @@ export const attendanceAPI = {
   checkOut: async (userData, locationData = null) => {
     const checkoutData = {
       employee_uid: userData.uid,
-      employee_id: userData.employeeId || userData.uid,
+      employee_id: userData.employeeId || userData.sqlEmployeeId || userData.uid,
     };
 
     if (locationData) {
@@ -96,11 +94,20 @@ export const attendanceAPI = {
     return await apiCall('/checkout', 'POST', checkoutData);
   },
 
+  // Jadwal shift hari ini (preview hadir/terlambat)
+  getScheduleToday: async (userData) => {
+    const params = new URLSearchParams({
+      employee_uid: userData.uid,
+      employee_id: String(userData.employeeId || userData.sqlEmployeeId || userData.uid),
+    });
+    return await apiCall(`/schedule_today?${params}`);
+  },
+
   // Get attendance history
   getHistory: async (userData, limit = 30, offset = 0) => {
     const params = new URLSearchParams({
       employee_uid: userData.uid,
-      employee_id: userData.employeeId || userData.uid,
+      employee_id: userData.employeeId || userData.sqlEmployeeId || userData.uid,
       limit: limit.toString(),
       offset: offset.toString(),
     });
@@ -116,11 +123,13 @@ export const getCurrentUserData = async () => {
       const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
       if (userDoc.exists()) {
         const data = userDoc.data();
+        const sqlId = data.sqlEmployeeId || data.employeeId;
         return {
           uid: auth.currentUser.uid,
           email: auth.currentUser.email,
           name: data.name || data.displayName,
-          employeeId: data.employeeId || auth.currentUser.uid
+          employeeId: sqlId && /^\d+$/.test(String(sqlId)) ? parseInt(sqlId, 10) : (data.employeeId || null),
+          sqlEmployeeId: sqlId ? String(sqlId) : null,
         };
       }
     }

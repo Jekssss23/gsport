@@ -9,6 +9,7 @@ import {
   updateDoc,
   deleteDoc,
   getDoc,
+  setDoc,
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore';
@@ -310,6 +311,8 @@ export class BookingService {
         remainingAmount: Number(r.remaining_amount || 0),
         paymentProof: r.payment_proof_url,
         status: r.status,
+        has_rated: Number(r.has_rated ?? 0),
+        hasRated: Number(r.has_rated ?? 0) === 1,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
         assignedStaffName: r.assigned_staff_name || null,
@@ -560,45 +563,57 @@ export class BookingService {
     }
   }
 
-  // Add review
+  // Add review (MySQL reservations → server API + Firestore; legacy Firestore bookings → client write)
   static async addReview(reviewData) {
-    try {
-      // First, sync MySQL booking to Firestore if needed
-      await this.syncBookingToFirestore(reviewData.bookingId);
+    const bookingId = String(reviewData.bookingId || '');
+    if (!bookingId) {
+      throw new Error('Booking ID tidak valid');
+    }
 
+    const payload = {
+      reservation_id: Number(bookingId),
+      has_rated: 1,
+      rating: Number(reviewData.rating),
+      staff_rating: Number(reviewData.staffRating || 0),
+      review: (reviewData.review && typeof reviewData.review === 'string') ? reviewData.review.trim() : '',
+      staff_on_duty_id: reviewData.staffOnDutyId || '',
+      staff_on_duty_name: reviewData.staffOnDutyName || '',
+      user_id: reviewData.userId || '',
+      user_name: reviewData.userName || '',
+      facility_name: reviewData.facilityName || '',
+      booking_date: reviewData.bookingDate || '',
+    };
+
+    if (this.isMysqlReservationId(bookingId)) {
+      const res = await fetch(`${API_BASE_URL}/reservation/rate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) {
+        throw new Error(json.message || 'Gagal menyimpan rating ke server');
+      }
+      return json;
+    }
+
+    try {
       const reviewsRef = collection(db, 'reviews');
       await addDoc(reviewsRef, {
         ...reviewData,
-        bookingId: String(reviewData.bookingId),
-        createdAt: serverTimestamp()
+        bookingId,
+        rating: Number(reviewData.rating),
+        staffRating: Number(reviewData.staffRating || 0),
+        createdAt: serverTimestamp(),
       });
 
-      // Update hasRated in Firestore
-      const bookingRef = doc(db, 'bookings', String(reviewData.bookingId));
-      await updateDoc(bookingRef, {
+      const bookingRef = doc(db, 'bookings', bookingId);
+      await setDoc(bookingRef, {
         hasRated: true,
-        updatedAt: serverTimestamp()
-      });
-
-      // Update has_rated in MySQL via API
-      if (this.isMysqlReservationId(reviewData.bookingId)) {
-        try {
-          await fetch(`${API_BASE_URL}/reservation/rate`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              reservation_id: Number(reviewData.bookingId),
-              has_rated: 1
-            }),
-          });
-        } catch (e) {
-          console.error('Error updating MySQL rating status:', e);
-        }
-      }
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
     } catch (error) {
-      console.error('Error adding review:', error);
+      console.error('Error adding review to Firestore:', error);
       throw error;
     }
   }

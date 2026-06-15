@@ -13,8 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ClassScheduleService } from '../../services/ClassScheduleService';
 import { theme } from '../../styles/theme';
-import { db } from '../../config/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db, auth } from '../../config/firebase';
+import { doc, getDoc, updateDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore';
 import AppModalAlert from '../../components/AppModalAlert';
 
 export default function AdminClassAttendanceScanScreen({ navigation }) {
@@ -46,13 +46,15 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
       setBusy(true);
       setScanned(true);
       
-      if (scanMode === 'class') {
+      const qrData = String(data).trim();
+
+      // AUTO-DETECTION FLOW
+      // 1. Check if it's a Class Member QR (starts with GSCMEMv1)
+      if (qrData.startsWith('GSCMEMv1|')) {
         try {
-          const result = await ClassScheduleService.attendanceCheckInMemberAuto(data);
+          const result = await ClassScheduleService.attendanceCheckInMemberAuto(qrData);
           const title = result.already ? 'Sudah absen' : 'Berhasil';
-          const msg =
-            result.message ||
-            (result.data?.member_name ? `${result.data.member_name} — OK` : 'OK');
+          const msg = result.message || (result.data?.member_name ? `${result.data.member_name} — OK` : 'OK');
           showModal({
             title,
             message: msg,
@@ -74,53 +76,56 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
         } finally {
           setBusy(false);
         }
-      } else if (scanMode === 'gsc') {
-        try {
-          const packageRef = doc(db, 'gsc_packages', data);
-          const packageSnap = await getDoc(packageRef);
-          
-          if (packageSnap.exists()) {
-            const pkgData = packageSnap.data();
-            if (pkgData.remainingHours <= 0) {
-              showModal({
-                title: 'Paket Habis',
-                message: 'Paket GSC ini sudah habis (0 jam).',
-                onCloseAction: () => {
-                  setScanned(false);
-                  setBusy(false);
-                },
-              });
-            } else {
-              setGscPackageId(data);
-              setGscPackageData(pkgData);
-              setHoursToDeduct('');
-              setGscModalVisible(true);
-              setBusy(false); // Modal takes over
-            }
-          } else {
-             showModal({
-              title: 'Tidak Ditemukan',
-              message: 'QR Code bukan paket GSC yang valid.',
+        return;
+      }
+
+      // 2. If not a class member QR, check if it's a GSC Package in Firestore
+      try {
+        const packageRef = doc(db, 'gsc_packages', qrData);
+        const packageSnap = await getDoc(packageRef);
+        
+        if (packageSnap.exists()) {
+          const pkgData = packageSnap.data();
+          if (pkgData.remainingHours <= 0) {
+            showModal({
+              title: 'Paket Habis',
+              message: 'Paket GSC ini sudah habis (0 jam).',
               onCloseAction: () => {
                 setScanned(false);
                 setBusy(false);
               },
             });
+          } else {
+            setGscPackageId(qrData);
+            setGscPackageData(pkgData);
+            setHoursToDeduct('');
+            setGscModalVisible(true);
+            setBusy(false); // Modal takes over
           }
-        } catch (e) {
+        } else {
+          // 3. Fallback: Try class attendance anyway or show error
           showModal({
-            title: 'Error',
-            message: 'Gagal memproses QR Code GSC.',
+            title: 'Tidak Ditemukan',
+            message: 'QR Code tidak dikenali sebagai Paket GSC atau Member Kelas.',
             onCloseAction: () => {
               setScanned(false);
               setBusy(false);
             },
           });
-          setBusy(false);
         }
+      } catch (e) {
+        showModal({
+          title: 'Error',
+          message: 'Gagal memproses QR Code. Silakan coba lagi.',
+          onCloseAction: () => {
+            setScanned(false);
+            setBusy(false);
+          },
+        });
+        setBusy(false);
       }
     },
-    [scanned, busy, navigation, scanMode]
+    [scanned, busy, navigation]
   );
 
   const handleDeductHours = async () => {
@@ -137,14 +142,35 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
     setBusy(true);
     try {
       const packageRef = doc(db, 'gsc_packages', gscPackageId);
+      const newRemaining = gscPackageData.remainingHours - hours;
+      
       await updateDoc(packageRef, {
-        remainingHours: gscPackageData.remainingHours - hours
+        remainingHours: newRemaining,
+        updatedAt: serverTimestamp()
       });
+
+      // Optional: Record usage log
+      try {
+        await addDoc(collection(db, 'gsc_package_usage'), {
+          packageId: gscPackageId,
+          userId: gscPackageData.userId,
+          userEmail: gscPackageData.userEmail,
+          sportType: gscPackageData.sportType,
+          hoursDeducted: hours,
+          previousHours: gscPackageData.remainingHours,
+          newRemainingHours: newRemaining,
+          adminId: auth.currentUser?.uid,
+          adminEmail: auth.currentUser?.email,
+          createdAt: serverTimestamp()
+        });
+      } catch (logErr) {
+        console.error("Error logging package usage:", logErr);
+      }
       
       setGscModalVisible(false);
       showModal({
         title: 'Berhasil',
-        message: `Berhasil memotong ${hours} jam. Sisa: ${gscPackageData.remainingHours - hours}.`,
+        message: `Berhasil memotong ${hours} jam. Sisa: ${newRemaining}.`,
         type: 'success',
         onCloseAction: () => {
           setScanned(false);
@@ -154,6 +180,7 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
         },
       });
     } catch (e) {
+      console.error("Error updating package:", e);
       showModal({ title: 'Error', message: 'Gagal menyimpan potongan jam.' });
       setBusy(false);
     }
@@ -189,24 +216,16 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
             <Ionicons name="arrow-back" size={28} color="#fff" />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.overlayTitle}>Pilih Mode Scan</Text>
+            <Text style={styles.overlayTitle}>Scanner GSC</Text>
           </View>
         </View>
 
         <View style={styles.modeContainer}>
-           <TouchableOpacity style={styles.modeCard} onPress={() => setScanMode('class')} activeOpacity={0.8}>
+           <TouchableOpacity style={styles.modeCard} onPress={() => setScanMode('auto')} activeOpacity={0.8}>
               <LinearGradient colors={theme.gradients.primary} style={styles.modeGradient}>
-                <Ionicons name="people" size={48} color="white" />
-                <Text style={styles.modeTitle}>Scan Member Class</Text>
-                <Text style={styles.modeDesc}>Absensi member kelas hari ini</Text>
-              </LinearGradient>
-           </TouchableOpacity>
-
-           <TouchableOpacity style={styles.modeCard} onPress={() => setScanMode('gsc')} activeOpacity={0.8}>
-              <LinearGradient colors={['#10b981', '#059669']} style={styles.modeGradient}>
-                <Ionicons name="cube" size={48} color="white" />
-                <Text style={styles.modeTitle}>Scan Paket GSC</Text>
-                <Text style={styles.modeDesc}>Potong jam bermain paket GSC</Text>
+                <Ionicons name="scan-circle" size={64} color="white" />
+                <Text style={styles.modeTitle}>Mulai Scan</Text>
+                <Text style={styles.modeDesc}>Scan QR Member Kelas atau Paket GSC</Text>
               </LinearGradient>
            </TouchableOpacity>
         </View>
@@ -219,8 +238,8 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
       <CameraView
         style={StyleSheet.absoluteFillObject}
         facing="back"
-        barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-        onBarcodeScanned={scanned ? undefined : onBarcodeScanned}
+        barCodeScannerSettings={{ barCodeTypes: ['qr'] }}
+        onBarCodeScanned={scanned ? undefined : onBarcodeScanned}
       />
 
       <View style={styles.overlayTop}>
@@ -228,9 +247,9 @@ export default function AdminClassAttendanceScanScreen({ navigation }) {
           <Ionicons name="arrow-back" size={28} color="#fff" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.overlayTitle}>{scanMode === 'class' ? 'Scan Member Class' : 'Scan Paket GSC'}</Text>
+          <Text style={styles.overlayTitle}>Scanner Universal</Text>
           <Text style={styles.overlaySubTitle} numberOfLines={1}>
-             {scanMode === 'class' ? 'Arahkan ke QR absensi member.' : 'Arahkan ke QR Paket GSC member.'}
+             Arahkan ke QR Paket GSC atau QR Member Kelas.
           </Text>
         </View>
       </View>

@@ -141,7 +141,7 @@ export default function MyReservationHistoryScreen({ navigation }) {
 
   const isBookingCompleted = (booking) => booking.status === 'completed' || booking.status === 'selesai';
   const canRateBooking = (booking) => isBookingCompleted(booking) && (booking.has_rated === 0 || !booking.has_rated);
-  const canCancelBooking = (booking) => booking.status === 'confirmed';
+  const canCancelBooking = (booking) => booking.status === 'pending';
   const canGenerateETicket = (booking) =>
     ['confirmed', 'completed', 'selesai'].includes(String(booking.status || '').toLowerCase());
 

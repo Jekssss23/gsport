@@ -68,8 +68,8 @@ export default function ClassAttendanceScanScreen({ navigation }) {
       <CameraView
         style={StyleSheet.absoluteFillObject}
         facing="back"
-        barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-        onBarcodeScanned={scanned ? undefined : onBarcodeScanned}
+        barCodeScannerSettings={{ barCodeTypes: ['qr'] }}
+        onBarCodeScanned={scanned ? undefined : onBarcodeScanned}
       />
       <View style={styles.overlayTop}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} accessibilityLabel="Kembali">

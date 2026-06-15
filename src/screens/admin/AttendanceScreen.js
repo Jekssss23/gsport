@@ -13,8 +13,10 @@ import AppModalAlert from '../../components/AppModalAlert';
 const { width } = Dimensions.get('window');
 
 export default function AttendanceScreen() {
-  const [isAttended, setIsAttended] = useState(false);
+  // phase: check_in | wait_checkout | completed
+  const [phase, setPhase] = useState('check_in');
   const [attendanceTime, setAttendanceTime] = useState(null);
+  const [checkOutTime, setCheckOutTime] = useState(null);
   const [locationStatus, setLocationStatus] = useState('checking'); // checking, granted, denied, error
   const [currentLocation, setCurrentLocation] = useState(null);
   const [attendanceSettings, setAttendanceSettings] = useState(null);
@@ -24,6 +26,7 @@ export default function AttendanceScreen() {
   const [selfieUri, setSelfieUri] = useState(null);
   const [selfieUploading, setSelfieUploading] = useState(false);
   const [modalError, setModalError] = useState({ visible: false, title: 'Info', message: '', type: 'warning' });
+  const [todaySchedule, setTodaySchedule] = useState(null);
 
   const showModal = (title, message, type = 'warning') => {
     setModalError({ visible: true, title, message, type });
@@ -60,28 +63,48 @@ export default function AttendanceScreen() {
       }
     };
 
-    const checkHistory = async () => {
+    const loadTodayStatus = async () => {
       try {
         const userData = await getCurrentUserData();
-        if (userData) {
-          const res = await attendanceAPI.getHistory(userData, 1, 0);
-          if (res.success && res.data && res.data.length > 0) {
-            const lastRecord = res.data[0];
-            const today = new Date().toISOString().split('T')[0];
-            if (lastRecord.date === today) {
-              setIsAttended(true);
-              setAttendanceTime(lastRecord.check_in);
+        if (!userData) return;
+        const res = await attendanceAPI.getScheduleToday(userData);
+        if (res.success && res.data) {
+          const d = res.data;
+          setTodaySchedule(d);
+          if (d.check_in) {
+            setAttendanceTime(d.check_in);
+            if (d.check_out) {
+              setCheckOutTime(d.check_out);
+              setPhase('completed');
+            } else {
+              setPhase('wait_checkout');
             }
+          } else {
+            setPhase('check_in');
           }
         }
       } catch (e) {
-        console.error("Check history err", e);
+        console.warn('Today status unavailable', e);
       }
     };
 
     fetchAttendanceSettings();
-    checkHistory();
+    loadTodayStatus();
   }, []);
+
+  // Refresh status checkout setiap menit saat menunggu absen pulang
+  useEffect(() => {
+    if (phase !== 'wait_checkout') return undefined;
+    const timer = setInterval(async () => {
+      try {
+        const userData = await getCurrentUserData();
+        if (!userData) return;
+        const res = await attendanceAPI.getScheduleToday(userData);
+        if (res.success && res.data) setTodaySchedule(res.data);
+      } catch (_) {}
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [phase]);
 
   // Check location permissions and get current location
   useEffect(() => {
@@ -188,7 +211,7 @@ export default function AttendanceScreen() {
 
   // Pulse animation for the button
   useEffect(() => {
-    if (!isAttended && isWithinRadius) {
+    if (phase === 'check_in' && isWithinRadius) {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -206,10 +229,10 @@ export default function AttendanceScreen() {
       pulse.start();
       return () => pulse.stop();
     }
-  }, [isAttended, isWithinRadius]);
+  }, [phase, isWithinRadius]);
 
   const handleAttendance = async () => {
-    if (isAttended) return;
+    if (phase !== 'check_in') return;
 
     // Check if within radius
     if (!isWithinRadius) {
@@ -245,11 +268,6 @@ export default function AttendanceScreen() {
         is_mocked: currentLocation.isMocked === true,
       };
 
-      // Handle Mock Location Fake GPS
-      if (currentLocation.isMocked) {
-        locationData.status = 'fake gps';
-      }
-
       // Upload selfie to Cloudinary (preferred)
       setSelfieUploading(true);
       const selfieUrl = await CloudinaryService.uploadImage(selfieUri, {
@@ -261,11 +279,19 @@ export default function AttendanceScreen() {
       const response = await attendanceAPI.saveAttendance(userData, locationData);
 
       if (response.success) {
-        // Set attended locally
-        setIsAttended(true);
+        setPhase('wait_checkout');
         setSelfieUri(null);
         const now = new Date();
         setAttendanceTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        if (response.data?.schedule_end) {
+          setTodaySchedule((prev) => ({
+            ...(prev || {}),
+            schedule_end: response.data.schedule_end,
+            shift_label: response.data.shift_label,
+            checkout_available_at: response.data.schedule_end,
+            can_checkout: false,
+          }));
+        }
 
         // Scale down animation
         Animated.sequence([
@@ -289,6 +315,12 @@ export default function AttendanceScreen() {
           ]),
         ]).start();
 
+        const statusLabel = response.data?.status === 'terlambat' ? 'Terlambat' : (response.data?.status === 'fake gps' ? 'Fake GPS' : 'Hadir');
+        showModal(
+          'Absen Masuk Berhasil',
+          `Status: ${statusLabel}${response.data?.shift_label ? `\nShift: ${response.data.shift_label}` : ''}${response.data?.schedule_start ? `\nMasuk: ${response.data.schedule_start}` : ''}${response.data?.schedule_end ? `\nPulang: ${response.data.schedule_end}` : ''}${response.data?.status_reason ? `\n${response.data.status_reason}` : ''}`,
+          response.data?.status === 'terlambat' ? 'warning' : 'success'
+        );
         console.log('Attendance recorded successfully:', response.data);
       } else {
         // Handle explicit server failures cleanly without throwing an exception
@@ -296,7 +328,7 @@ export default function AttendanceScreen() {
         
         // Auto-sync UI if server says they already checked in independently of frontend state
         if (response.message && response.message.toLowerCase().includes('sudah melakukan check-in')) {
-          setIsAttended(true);
+          setPhase('wait_checkout');
         }
       }
     } catch (error) {
@@ -307,12 +339,55 @@ export default function AttendanceScreen() {
     }
   };
 
-  const handleReset = () => {
-    setIsAttended(false);
-    setAttendanceTime(null);
-    rotateAnim.setValue(0);
-    scaleAnim.setValue(1);
-    pulseAnim.setValue(1);
+  const handleCheckOut = async () => {
+    if (phase !== 'wait_checkout') return;
+
+    if (!todaySchedule?.can_checkout) {
+      showModal(
+        'Belum Waktunya',
+        todaySchedule?.checkout_message || `Absen pulang tersedia setelah jam ${todaySchedule?.checkout_available_at || todaySchedule?.schedule_end || '-'}`,
+      );
+      return;
+    }
+
+    if (!isWithinRadius) {
+      showModal(
+        'Lokasi Tidak Valid',
+        `Anda berada di luar radius absensi. Jarak: ${Math.round(distance)}m (Max: ${attendanceSettings.radius_meters}m).`
+      );
+      return;
+    }
+
+    if (locationStatus !== 'granted' || !currentLocation) {
+      showModal('Lokasi Tidak Tersedia', 'Tidak dapat memverifikasi lokasi untuk absen pulang.');
+      return;
+    }
+
+    try {
+      const userData = await getCurrentUserData();
+      if (!userData) throw new Error('User data not found');
+
+      const response = await attendanceAPI.checkOut(userData, {
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+      });
+
+      if (response.success) {
+        setPhase('completed');
+        const outTime = response.data?.check_out;
+        setCheckOutTime(outTime || new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        showModal(
+          'Absen Pulang Berhasil',
+          `Masuk: ${response.data?.check_in || attendanceTime}\nPulang: ${outTime || checkOutTime}`,
+          'success'
+        );
+      } else {
+        showModal('Informasi', response.message || 'Gagal absen pulang.');
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      showModal('Koneksi Gagal', getUserFriendlyErrorMessage(error, 'Gagal absen pulang. Coba lagi.'));
+    }
   };
 
   const refreshLocation = async () => {
@@ -438,84 +513,121 @@ export default function AttendanceScreen() {
         <View style={styles.infoCard}>
           <Text style={styles.infoTitle}>Status Absensi Hari Ini</Text>
           <Text style={styles.infoDate}>{new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</Text>
+          {todaySchedule?.schedule_start ? (
+            <Text style={styles.scheduleHint}>
+              {todaySchedule.shift_display || todaySchedule.shift_label || 'Shift'} · Masuk {todaySchedule.schedule_start}
+              {todaySchedule.schedule_end ? ` · Pulang ${todaySchedule.schedule_end}` : ''}
+              {todaySchedule.deadline ? `\nBatas hadir ${todaySchedule.deadline}` : ''}
+              {todaySchedule.grace_period_minutes ? ` (+${todaySchedule.grace_period_minutes} menit)` : ''}
+            </Text>
+          ) : (
+            <Text style={styles.scheduleHintMuted}>Jadwal shift belum diatur di Employee Management</Text>
+          )}
+          {phase === 'wait_checkout' && !todaySchedule?.can_checkout && todaySchedule?.checkout_available_at && (
+            <Text style={styles.waitCheckoutHint}>
+              Absen pulang tersedia setelah jam {todaySchedule.checkout_available_at}
+            </Text>
+          )}
         </View>
 
         <View style={styles.buttonContainer}>
-          <Text style={styles.instruction}>
-            {isAttended ? 'Absensi Berhasil Dicatat!' :
-              !isWithinRadius ? 'Dekat ke lokasi absensi terlebih dahulu!' :
-                'Tekan Tombol Untuk Absen'}
-          </Text>
-
-          <Animated.View
-            style={[
-              styles.buttonWrapper,
-              {
-                transform: [
-                  { scale: isAttended ? scaleAnim : (isWithinRadius ? Animated.multiply(scaleAnim, pulseAnim) : scaleAnim) },
-                  { rotate: rotation }
-                ]
-              }
-            ]}
-          >
-            <TouchableOpacity
-              onPress={handleAttendance}
-              disabled={isAttended || !isWithinRadius || selfieUploading}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={
-                  isAttended ? ['#00FF00', '#00AA00'] :
-                    !isWithinRadius ? ['#666666', '#444444'] :
-                      ['#FF0000', '#CC0000']
-                }
-                style={styles.attendanceButton}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Ionicons
-                  name={
-                    isAttended ? "checkmark-circle" :
-                      !isWithinRadius ? "close-circle" :
-                        "finger-print"
-                  }
-                  size={80}
-                  color="white"
-                />
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
-
-          {!isAttended && (
-            <View style={styles.selfieRow}>
-              <TouchableOpacity
-                onPress={handleTakeSelfie}
-                disabled={!isWithinRadius || selfieUploading}
+          {phase === 'check_in' && (
+            <>
+              <Text style={styles.instruction}>
+                {!isWithinRadius ? 'Dekat ke lokasi absensi terlebih dahulu!' : 'Tekan untuk Absen Masuk'}
+              </Text>
+              <Animated.View
                 style={[
-                  styles.selfieButton,
-                  (!isWithinRadius || selfieUploading) && { opacity: 0.6 }
+                  styles.buttonWrapper,
+                  {
+                    transform: [
+                      { scale: isWithinRadius ? Animated.multiply(scaleAnim, pulseAnim) : scaleAnim },
+                      { rotate: rotation }
+                    ]
+                  }
                 ]}
               >
-                <Ionicons name="camera" size={18} color="white" />
-                <Text style={styles.selfieButtonText}>
-                  {selfieUri ? 'Selfie siap' : 'Ambil selfie'}
-                </Text>
-              </TouchableOpacity>
-              {selfieUploading && (
-                <View style={styles.selfieUploading}>
-                  <ActivityIndicator color="white" />
-                  <Text style={styles.selfieUploadingText}>Upload...</Text>
-                </View>
-              )}
-            </View>
+                <TouchableOpacity
+                  onPress={handleAttendance}
+                  disabled={!isWithinRadius || selfieUploading}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={!isWithinRadius ? ['#666666', '#444444'] : ['#FF0000', '#CC0000']}
+                    style={styles.attendanceButton}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Ionicons
+                      name={!isWithinRadius ? 'close-circle' : 'finger-print'}
+                      size={80}
+                      color="white"
+                    />
+                  </LinearGradient>
+                </TouchableOpacity>
+              </Animated.View>
+              <Text style={styles.phaseLabel}>ABSEN MASUK</Text>
+              <View style={styles.selfieRow}>
+                <TouchableOpacity
+                  onPress={handleTakeSelfie}
+                  disabled={!isWithinRadius || selfieUploading}
+                  style={[styles.selfieButton, (!isWithinRadius || selfieUploading) && { opacity: 0.6 }]}
+                >
+                  <Ionicons name="camera" size={18} color="white" />
+                  <Text style={styles.selfieButtonText}>{selfieUri ? 'Selfie siap' : 'Ambil selfie'}</Text>
+                </TouchableOpacity>
+                {selfieUploading && (
+                  <View style={styles.selfieUploading}>
+                    <ActivityIndicator color="white" />
+                    <Text style={styles.selfieUploadingText}>Upload...</Text>
+                  </View>
+                )}
+              </View>
+            </>
           )}
 
-          {isAttended && (
-            <Animated.View style={[styles.successInfo, { opacity: scaleAnim }]}>
+          {phase === 'wait_checkout' && (
+            <>
               <View style={styles.successCard}>
-                <Ionicons name="checkmark-circle" size={40} color="#00FF00" />
-                <Text style={styles.successText}>Absensi Tercatat</Text>
-                <Text style={styles.timeText}>Waktu: {attendanceTime}</Text>
+                <Ionicons name="checkmark-circle" size={36} color="#00FF00" />
+                <Text style={styles.successText}>Absen Masuk Tercatat</Text>
+                <Text style={styles.timeText}>Jam masuk: {attendanceTime}</Text>
+              </View>
+              <Text style={styles.instruction}>
+                {todaySchedule?.can_checkout
+                  ? 'Tekan untuk Absen Pulang'
+                  : `Menunggu jam pulang (${todaySchedule?.checkout_available_at || todaySchedule?.schedule_end || '-'})`}
+              </Text>
+              <TouchableOpacity
+                onPress={handleCheckOut}
+                disabled={!todaySchedule?.can_checkout || !isWithinRadius}
+                activeOpacity={0.8}
+                style={styles.checkoutButtonWrap}
+              >
+                <LinearGradient
+                  colors={
+                    todaySchedule?.can_checkout && isWithinRadius
+                      ? ['#2563EB', '#1D4ED8']
+                      : ['#666666', '#444444']
+                  }
+                  style={styles.checkoutButton}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons name="log-out-outline" size={48} color="white" />
+                  <Text style={styles.checkoutButtonText}>ABSEN PULANG</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {phase === 'completed' && (
+            <Animated.View style={[styles.successInfo, { opacity: scaleAnim }]}>
+              <View style={styles.completedCard}>
+                <Ionicons name="checkmark-done-circle" size={48} color="#00FF00" />
+                <Text style={styles.successText}>Absensi Lengkap</Text>
+                <Text style={styles.timeText}>Masuk: {attendanceTime}</Text>
+                <Text style={styles.timeText}>Pulang: {checkOutTime}</Text>
                 <Text style={styles.locationVerifiedText}>📍 Lokasi Terverifikasi</Text>
               </View>
             </Animated.View>
@@ -676,6 +788,64 @@ const styles = StyleSheet.create({
   infoDate: {
     color: theme.colors.textSecondary,
     fontSize: 14,
+  },
+  scheduleHint: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  scheduleHintMuted: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    marginTop: 8,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  waitCheckoutHint: {
+    color: '#FBBF24',
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  phaseLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    marginTop: 12,
+    letterSpacing: 2,
+    fontWeight: '700',
+  },
+  checkoutButtonWrap: {
+    marginTop: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  checkoutButton: {
+    width: width - 80,
+    paddingVertical: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  checkoutButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 8,
+    letterSpacing: 1,
+  },
+  completedCard: {
+    backgroundColor: 'rgba(0,255,0,0.1)',
+    padding: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,255,0,0.3)',
+    width: '100%',
   },
   buttonContainer: {
     alignItems: 'center',

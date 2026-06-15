@@ -24,55 +24,76 @@ export default function NotificationScreen({ navigation }) {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [showRatingModal, setShowRatingModal] = useState(false);
 
+  const mapBookingForRating = (booking) => ({
+    ...booking,
+    id: booking.id,
+    facilityName: booking.facility_name,
+    courtName: booking.court_name,
+    date: booking.booking_date,
+    timeSlots: booking.time_slots || [],
+    userId: booking.firebase_uid,
+    userName: booking.user_name,
+  });
+
   const fetchNotifications = async () => {
     if (!auth.currentUser) return;
 
     try {
-      const userId = auth.currentUser.uid || auth.currentUser.email;
-      const res = await fetch(`${API_BASE_URL}/reservation/my?firebase_uid=${userId}`);
-      const json = await res.json();
-      
-      if (json.ok && json.data) {
-        // Filter reservations that are completed but not rated yet
-        const unrated = json.data.filter(booking => 
-          (booking.status === 'completed' || booking.status === 'selesai') && 
-          (booking.has_rated === 0 || !booking.has_rated)
-        );
-        
-        // Map these to a "notification" format
-        const notifs = unrated.map(booking => ({
-          id: `rate_${booking.id}`,
-          type: 'rating_prompt',
-          title: 'Beri Rating Reservasi! 🏆',
-          message: `Reservasi ${booking.reservation_code || 'Anda'} di ${booking.facility_name} (${booking.court_name}) telah selesai. Bagikan pengalaman Anda!`,
-          date: booking.booking_date,
-          booking: {
-            ...booking,
-            facilityName: booking.facility_name,
-            courtName: booking.court_name,
-            date: booking.booking_date
-          }
-        }));
-        
-        let eventNotifs = [];
-        try {
-          const eventRes = await fetch(`${API_BASE_URL}/notification/my?user_id=${userId}`);
-          const eventJson = await eventRes.json();
-          if (eventRes.ok && eventJson.ok) {
-            eventNotifs = (eventJson.data || []).map((n) => ({
-              id: n.id,
-              type: n.type || 'event',
-              title: n.title || 'Info',
+      const userId = auth.currentUser.uid;
+      const items = [];
+      const seen = new Set();
+
+      try {
+        const notifRes = await fetch(`${API_BASE_URL}/notification/my?user_id=${encodeURIComponent(userId)}`);
+        const notifJson = await notifRes.json();
+        if (notifRes.ok && notifJson.ok) {
+          for (const n of notifJson.data || []) {
+            const id = n.id || `n_${Date.now()}_${Math.random()}`;
+            if (seen.has(id)) continue;
+            seen.add(id);
+            items.push({
+              id,
+              type: n.type || 'general',
+              title: n.title || 'Notifikasi',
               message: n.message || '',
               date: (n.created_at || '').slice(0, 10),
-            }));
+              reservation_id: n.reservation_id,
+              event_id: n.event_id,
+            });
           }
-        } catch (e) {}
-
-        setNotifications([...eventNotifs, ...notifs]);
+        }
+      } catch (e) {
+        console.warn('notification/my failed', e);
       }
+
+      const res = await fetch(`${API_BASE_URL}/reservation/my?firebase_uid=${encodeURIComponent(userId)}`);
+      const json = await res.json();
+
+      if (json.ok && json.data) {
+        const unrated = json.data.filter((booking) =>
+          (booking.status === 'completed' || booking.status === 'selesai') &&
+          (Number(booking.has_rated) === 0 || !booking.has_rated)
+        );
+
+        for (const booking of unrated) {
+          const id = `rate_${booking.id}`;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          items.push({
+            id,
+            type: 'rating_prompt',
+            title: 'Beri Rating Reservasi! 🏆',
+            message: `Reservasi ${booking.reservation_code || ''} di ${booking.facility_name} (${booking.court_name}) telah selesai.`,
+            date: booking.booking_date,
+            booking: mapBookingForRating(booking),
+          });
+        }
+      }
+
+      items.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      setNotifications(items);
     } catch (error) {
-      console.error("Error fetching notifications:", error);
+      console.error('Error fetching notifications:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -90,7 +111,24 @@ export default function NotificationScreen({ navigation }) {
 
   const handleNotificationPress = async (notif) => {
     if (notif.type === 'rating_prompt') {
-      const booking = notif.booking;
+      let booking = notif.booking;
+
+      if (!booking && notif.reservation_id) {
+        try {
+          const res = await fetch(`${API_BASE_URL}/reservation/get_booking?id=${encodeURIComponent(notif.reservation_id)}`);
+          const json = await res.json();
+          if (res.ok && json.data) {
+            booking = mapBookingForRating(json.data);
+          }
+        } catch (e) {
+          console.warn('get_booking failed', e);
+        }
+      }
+
+      if (!booking) {
+        navigation.navigate('MyReservationHistory');
+        return;
+      }
       try {
         // Enrich booking with staff-on-duty so RatingScreen can show staff rating section.
         const facilityName = booking?.facilityName || booking?.facility_name || '';
@@ -121,7 +159,16 @@ export default function NotificationScreen({ navigation }) {
       }
     } else if (notif.type === 'event') {
       navigation.navigate('Events');
+    } else if (notif.type === 'reservation_confirmed') {
+      navigation.navigate('MyReservationHistory');
     }
+  };
+
+  const getNotifIcon = (type) => {
+    if (type === 'event') return { name: 'calendar', color: theme.colors.primary };
+    if (type === 'reservation_confirmed') return { name: 'checkmark-circle', color: theme.colors.success };
+    if (type === 'rating_prompt') return { name: 'star', color: '#FFD700' };
+    return { name: 'notifications', color: theme.colors.primary };
   };
 
   const handleRatingSubmit = () => {
@@ -175,7 +222,7 @@ export default function NotificationScreen({ navigation }) {
               activeOpacity={0.7}
             >
               <View style={styles.notifIconContainer}>
-                <Ionicons name={notif.type === 'event' ? 'images-outline' : 'star'} size={24} color={notif.type === 'event' ? theme.colors.primary : '#FFD700'} />
+                <Ionicons name={getNotifIcon(notif.type).name} size={24} color={getNotifIcon(notif.type).color} />
               </View>
               <View style={styles.notifTextContainer}>
                 <View style={styles.notifHeader}>
@@ -184,7 +231,13 @@ export default function NotificationScreen({ navigation }) {
                 </View>
                 <Text style={styles.notifMessage}>{notif.message}</Text>
                 <View style={styles.actionPrompt}>
-                  <Text style={styles.actionPromptText}>{notif.type === 'event' ? 'Ketuk untuk lihat event' : 'Ketuk untuk memberi rating'}</Text>
+                  <Text style={styles.actionPromptText}>
+                    {notif.type === 'event'
+                      ? 'Ketuk untuk lihat event'
+                      : notif.type === 'reservation_confirmed'
+                        ? 'Ketuk untuk lihat reservasi'
+                        : 'Ketuk untuk memberi rating'}
+                  </Text>
                   <Ionicons name="chevron-forward" size={14} color={theme.colors.primary} />
                 </View>
               </View>

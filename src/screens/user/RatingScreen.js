@@ -13,7 +13,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
+import { auth } from '../../config/firebase';
 import { BookingService } from '../../services/BookingService';
+import { getUserFriendlyErrorMessage } from '../../utils/errorMessages';
 
 const RatingScreen = ({
   visible,
@@ -26,13 +28,55 @@ const RatingScreen = ({
   const [review, setReview] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [staffName, setStaffName] = useState(
+    booking?.staffOnDutyName || booking?.assigned_staff_name || 'Petugas Jaga'
+  );
+  const [staffId, setStaffId] = useState(booking?.staffOnDutyId || booking?.assigned_staff_id || '');
+  const [staffLoading, setStaffLoading] = useState(false);
+
   const emoteOptions = [
-    { value: 'angry', emote: '😡', label: 'Sangat Buruk' },
-    { value: 'neutral', emote: '😑', label: 'Cukup Baik' },
-    { value: 'happy', emote: '☺️', label: 'Baik' },
-    { value: 'very_happy', emote: '😁', label: 'Sangat Baik' },
-    { value: 'love', emote: '😍', label: 'Luar Biasa' }
+    { value: 1, emote: '😡', label: 'Sangat Buruk' },
+    { value: 2, emote: '😑', label: 'Kurang Baik' },
+    { value: 3, emote: '☺️', label: 'Cukup Baik' },
+    { value: 4, emote: '😁', label: 'Baik' },
+    { value: 5, emote: '😍', label: 'Luar Biasa' }
   ];
+
+  React.useEffect(() => {
+    if (!visible || !booking) return;
+
+    setRating('');
+    setStaffRating(0);
+    setReview('');
+    setStaffName(booking.staffOnDutyName || booking.assigned_staff_name || 'Petugas Jaga');
+    setStaffId(booking.staffOnDutyId || booking.assigned_staff_id || '');
+
+    const fetchStaff = async () => {
+      if (booking.staffOnDutyName || booking.assigned_staff_name) return;
+
+      setStaffLoading(true);
+      try {
+        const date = booking.date || booking.booking_date;
+        const slots = booking.timeSlots || booking.time_slots || [];
+        const hour = Array.isArray(slots) && slots.length > 0 ? Math.min(...slots.map(Number)) : null;
+        const facility = booking.facilityName || booking.facility_name || '';
+
+        if (date && hour !== null && facility) {
+          const staff = await BookingService.getStaffBySlot(date, hour, facility);
+          if (staff?.employeeName) {
+            setStaffName(staff.employeeName);
+            setStaffId(staff.employeeId || '');
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching staff for rating:', e);
+      } finally {
+        setStaffLoading(false);
+      }
+    };
+
+    fetchStaff();
+  }, [visible, booking?.id]);
 
   const handleRating = (value) => {
     setRating(value);
@@ -40,11 +84,15 @@ const RatingScreen = ({
 
   const handleSubmit = async () => {
     if (!rating) {
-      Alert.alert('Error', 'Silakan pilih rating terlebih dahulu');
+      Alert.alert('Error', 'Silakan pilih rating pengalaman (emote) terlebih dahulu');
       return;
     }
 
-    // Validate booking data
+    if (!staffRating || staffRating < 1) {
+      Alert.alert('Error', 'Silakan beri rating bintang untuk petugas jaga (1–5 bintang)');
+      return;
+    }
+
     if (!booking || !booking.id) {
       Alert.alert('Error', 'Data booking tidak valid. Silakan coba lagi.');
       return;
@@ -53,18 +101,18 @@ const RatingScreen = ({
     setLoading(true);
     try {
       const reviewData = {
-        bookingId: String(booking.id), // Convert to string for Firestore
-        userId: booking.userId || booking.firebase_uid,
+        bookingId: String(booking.id),
+        userId: booking.userId || booking.firebase_uid || auth.currentUser?.uid,
         facilityId: booking.courtId || booking.facility_id,
         facilityName: booking.facilityName || booking.facility_name,
-        rating,
-        staffRating,
-        staffOnDutyId: booking.staffOnDutyId || null,
-        staffOnDutyName: booking.staffOnDutyName || null,
+        rating: Number(rating),
+        staffRating: Number(staffRating),
+        staffOnDutyId: staffId || '',
+        staffOnDutyName: staffName || 'Petugas Jaga',
         review: (review && typeof review === 'string') ? review.trim() : '',
-        userName: booking.userName || booking.user_name,
+        userName: booking.userName || booking.user_name || auth.currentUser?.email || '',
         bookingDate: booking.date || booking.booking_date,
-        ratingType: 'emote_with_staff_star'
+        ratingType: 'emote_with_staff_star',
       };
 
       await BookingService.addReview(reviewData);
@@ -73,7 +121,7 @@ const RatingScreen = ({
       Alert.alert('Terima Kasih!', 'Rating dan ulasan Anda berhasil disimpan.');
     } catch (error) {
       console.error('Error submitting review:', error);
-      Alert.alert('Error', 'Gagal menyimpan rating. Silakan coba lagi.');
+      Alert.alert('Error', getUserFriendlyErrorMessage(error, 'Gagal menyimpan rating. Silakan coba lagi.'));
     } finally {
       setLoading(false);
     }
@@ -120,9 +168,9 @@ const RatingScreen = ({
 
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.bookingInfo}>
-            <Text style={styles.facilityName}>{booking?.facilityName}</Text>
+            <Text style={styles.facilityName}>{booking?.facilityName || booking?.facility_name}</Text>
             <Text style={styles.bookingDetails}>
-              {booking?.courtName} • {booking?.date}
+              {(booking?.courtName || booking?.court_name || '-')} • {(booking?.date || booking?.booking_date || '-')}
             </Text>
           </View>
 
@@ -134,30 +182,33 @@ const RatingScreen = ({
             </Text>
           </View>
 
-          {booking?.staffOnDutyName && (
-            <View style={styles.staffRatingSection}>
-              <Text style={styles.sectionTitle}>Beri Rating untuk Petugas Jaga</Text>
-              <Text style={styles.staffNameText}>{booking.staffOnDutyName}</Text>
-              <View style={styles.starContainer}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <TouchableOpacity
-                    key={star}
-                    onPress={() => setStaffRating(star)}
-                    style={styles.starButton}
-                  >
-                    <Ionicons
-                      name={star <= staffRating ? "star" : "star-outline"}
-                      size={40}
-                      color={star <= staffRating ? "#FFD700" : "#999"}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={styles.ratingLabel}>
-                {staffRating > 0 ? `${staffRating} dari 5 Bintang` : 'Pilih bintang'}
-              </Text>
+          <View style={styles.staffRatingSection}>
+            <Text style={styles.sectionTitle}>Rating Petugas Jaga (Bintang)</Text>
+            {staffLoading ? (
+              <ActivityIndicator color={theme.colors.primary} style={{ marginBottom: 12 }} />
+            ) : (
+              <Text style={styles.staffNameText}>{staffName}</Text>
+            )}
+            <View style={styles.starContainer}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                  key={star}
+                  onPress={() => setStaffRating(star)}
+                  style={styles.starButton}
+                  accessibilityLabel={`${star} bintang`}
+                >
+                  <Ionicons
+                    name={star <= staffRating ? 'star' : 'star-outline'}
+                    size={40}
+                    color={star <= staffRating ? '#FFD700' : '#999'}
+                  />
+                </TouchableOpacity>
+              ))}
             </View>
-          )}
+            <Text style={styles.ratingLabel}>
+              {staffRating > 0 ? `${staffRating} dari 5 bintang` : 'Wajib: ketuk bintang untuk petugas jaga'}
+            </Text>
+          </View>
 
           <View style={styles.reviewSection}>
             <Text style={styles.sectionTitle}>Tulis Ulasan (Opsional)</Text>
