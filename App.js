@@ -1,40 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { ActivityIndicator, View, Alert } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { auth, db } from './src/config/firebase';
 import { NotificationService } from './src/services/NotificationService';
 
-// Create navigation ref
 const navigationRef = createNavigationContainerRef();
 
-// Configure notifications handler
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+NotificationService.configurePresentation();
 
-// Screens
 import LandingScreen from './src/screens/LandingScreen';
 import LoadingScreen from './src/screens/LoadingScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
-
-// Admin Screens
 import AdminDashboard from './src/screens/admin/AdminDashboard';
 import AdminAttendanceScreen from './src/screens/admin/AttendanceScreen';
 import AdminClassAttendanceScanScreen from './src/screens/admin/ClassAttendanceScanScreen';
 import ClassSchedulingScreen from './src/screens/admin/ClassSchedulingScreen';
 import UserReservationHistoryScreen from './src/screens/admin/UserReservationHistoryScreen';
 import RatingMeScreen from './src/screens/admin/RatingMeScreen';
-
-// User Screens
+import EventScreen from './src/screens/common/EventScreen';
 import UserDashboard from './src/screens/user/UserDashboard';
 import FieldReservationScreen from './src/screens/user/FieldReservationScreen';
 import ClassScheduleScreen from './src/screens/user/ClassScheduleScreen';
@@ -43,6 +29,8 @@ import UserAttendanceScreen from './src/screens/user/AttendanceScreen';
 import GscPackageScreen from './src/screens/user/GscPackageScreen';
 import BuyPackageScreen from './src/screens/user/BuyPackageScreen';
 import NotificationScreen from './src/screens/user/NotificationScreen';
+import ETicketScreen from './src/screens/user/ETicketScreen';
+import ProfileScreen from './src/screens/user/ProfileScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -59,12 +47,13 @@ function AuthStack() {
 function AdminStack() {
   return (
     <Stack.Navigator>
-      <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ title: 'Admin Dashboard' }} />
-      <Stack.Screen name="Attendance" component={AdminAttendanceScreen} options={{ title: 'Attendance' }} />
+      <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ headerShown: false }} />
+      <Stack.Screen name="Attendance" component={AdminAttendanceScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ClassAttendanceScan" component={AdminClassAttendanceScanScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="ClassScheduling" component={ClassSchedulingScreen} options={{ title: 'Schedule Class' }} />
-      <Stack.Screen name="UserReservationHistory" component={UserReservationHistoryScreen} options={{ title: 'User History' }} />
-      <Stack.Screen name="RatingMe" component={RatingMeScreen} options={{ title: 'Rating Me' }} />
+      <Stack.Screen name="ClassScheduling" component={ClassSchedulingScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="UserReservationHistory" component={UserReservationHistoryScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="RatingMe" component={RatingMeScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Events" component={EventScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
@@ -74,12 +63,15 @@ function UserStack() {
     <Stack.Navigator>
       <Stack.Screen name="UserDashboard" component={UserDashboard} options={{ headerShown: false }} />
       <Stack.Screen name="Attendance" component={UserAttendanceScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="FieldReservation" component={FieldReservationScreen} options={{ title: 'Reserve Field' }} />
-      <Stack.Screen name="ClassSchedule" component={ClassScheduleScreen} options={{ title: 'Class Schedule' }} />
-      <Stack.Screen name="MyReservationHistory" component={MyReservationHistoryScreen} options={{ title: 'My History' }} />
-      <Stack.Screen name="GscPackage" component={GscPackageScreen} options={{ title: 'Paket GSC' }} />
-      <Stack.Screen name="BuyPackage" component={BuyPackageScreen} options={{ title: 'Beli Paket GSC' }} />
+      <Stack.Screen name="FieldReservation" component={FieldReservationScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ClassSchedule" component={ClassScheduleScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="MyReservationHistory" component={MyReservationHistoryScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="GscPackage" component={GscPackageScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="BuyPackage" component={BuyPackageScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Notifications" component={NotificationScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ETicket" component={ETicketScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Events" component={EventScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
@@ -90,18 +82,17 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUser(user);
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
         try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
           if (userDoc.exists()) {
             setRole(userDoc.data().role);
-            // Register for push notifications
-            NotificationService.registerForPushNotificationsAsync();
+            await NotificationService.registerForPushNotificationsAsync();
           }
         } catch (error) {
-          console.error("Error fetching user role:", error);
+          console.error('Error fetching user role:', error);
         }
       } else {
         setUser(null);
@@ -110,23 +101,10 @@ export default function App() {
       setLoading(false);
     });
 
-    // Set up notification listeners
     const unsubscribeNotifications = NotificationService.addNotificationListeners(
-      (notification) => {
-        // Handle foreground notification
-        console.log('Notification received in foreground:', notification);
-      },
+      null,
       (response) => {
-        // Handle notification tap
-        console.log('Notification tapped:', response);
-        const data = response.notification.request.content.data;
-        
-        if (data && data.type === 'rating_prompt') {
-          // Navigate to Notifications screen
-          if (navigationRef.isReady()) {
-            navigationRef.navigate('Notifications');
-          }
-        }
+        NotificationService.handleNotificationNavigation(response, navigationRef);
       }
     );
 

@@ -4,11 +4,11 @@
     "slug": "GSC",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/LOGO/LOGO GSPORT (ABU-ABU).png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/LOGO/LOGO GSPORT (ABU-ABU).png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -17,22 +17,47 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
+        "foregroundImage": "./assets/LOGO/LOGO GSPORT (ABU-ABU).png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "G.Sports.Center"
     },
     "web": {
-      "favicon": "./assets/icon.png"
+      "favicon": "./assets/LOGO/LOGO GSPORT (ABU-ABU).png"
     },
     "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/LOGO/LOGO GSPORT (ABU-ABU).png",
+          "color": "#E31E24",
+          "defaultChannel": "default",
+          "sounds": []
+        }
+      ],
       [
         "expo-camera",
         {
           "cameraPermission": "Aplikasi membutuhkan kamera untuk memindai QR absensi kelas."
         }
       ]
-    ]
+    ],
+    "notification": {
+      "icon": "./assets/LOGO/LOGO GSPORT (ABU-ABU).png",
+      "color": "#E31E24",
+      "androidMode": "default",
+      "androidCollapsedTitle": "G Sports Center"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "269e6350-dc6c-4096-ad18-a81585aa5135"
+      }
+    }
   }
 }
