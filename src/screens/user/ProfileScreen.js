@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { deleteUser } from 'firebase/auth';
 import { auth, db } from '../../config/firebase';
 import { theme } from '../../styles/theme';
 import { getUserFriendlyErrorMessage } from '../../utils/errorMessages';
@@ -66,6 +67,32 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
+  const confirmDelete = () => {
+    Alert.alert('Hapus Akun', 'Apakah kamu yakin ingin menghapus akun secara permanen? Data tidak dapat dikembalikan.', [
+      { text: 'Batal', style: 'cancel' },
+      { text: 'Hapus', style: 'destructive', onPress: onDeleteAccount },
+    ]);
+  };
+
+  const onDeleteAccount = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      setSaving(true);
+      await deleteDoc(doc(db, 'users', user.uid));
+      await deleteUser(user);
+    } catch (error) {
+      if (error.code === 'auth/requires-recent-login') {
+         Alert.alert('Gagal', 'Sesi login kamu sudah terlalu lama. Silakan logout dan login kembali untuk menghapus akun.');
+      } else {
+         Alert.alert('Error', getUserFriendlyErrorMessage(error, 'Gagal menghapus akun.'));
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -107,6 +134,10 @@ export default function ProfileScreen({ navigation }) {
         <TouchableOpacity style={styles.saveBtn} onPress={onSave} disabled={saving}>
           <Text style={styles.saveText}>{saving ? 'Menyimpan...' : 'Simpan Profil'}</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.deleteBtn} onPress={confirmDelete} disabled={saving}>
+          <Text style={styles.deleteText}>Hapus Akun</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -140,5 +171,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveText: { color: 'white', fontWeight: '800' },
+  deleteBtn: {
+    marginTop: 15,
+    backgroundColor: 'rgba(255, 0, 0, 0.1)',
+    borderWidth: 1,
+    borderColor: 'red',
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  deleteText: { color: 'red', fontWeight: '800' },
 });
 

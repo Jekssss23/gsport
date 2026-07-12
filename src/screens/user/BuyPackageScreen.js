@@ -261,7 +261,7 @@ export default function BuyPackageScreen({ navigation }) {
                 <View style={styles.qrisWrapper}>
                   <View style={styles.qrisBox}>
                     <Image 
-                      source={require('../../../assets/qris-gsc-bni.jpeg')} 
+                      source={require('../../../assets/QRIS GSC.jpeg')} 
                       style={{ width: 180, height: 180, borderRadius: 10 }} 
                       resizeMode="contain" 
                     />

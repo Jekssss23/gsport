@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '../config/api';
+import { API_BASE_URL, fetchWithTimeout } from '../config/api';
 import { auth } from '../config/firebase';
 
 export class ClassScheduleService {
@@ -306,13 +306,13 @@ export class ClassScheduleService {
 
   /** Admin/Employee: scan MEMBER QR payload → auto-pick today's session for that member's class */
   static async attendanceCheckInMemberAuto(memberQrPayload) {
-    const res = await fetch(`${API_BASE_URL}/class_schedule/attendance_checkin_member_auto`, {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/class_schedule/attendance_checkin_member_auto`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
         payload: String(memberQrPayload).trim(),
       }),
-    });
+    }, 15000);
     const text = await res.text();
     let json;
     try {

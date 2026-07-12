@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Dimensions } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Dimensions, ImageBackground } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase.js';
@@ -60,10 +60,13 @@ export default function RegisterScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <LinearGradient
-        colors={[theme.colors.background, '#000000']}
-        style={StyleSheet.absoluteFill}
-      />
+      {/* Background Image */}
+      <ImageBackground 
+        source={require('../../assets/LOGO/BG2.jpeg')} 
+        style={styles.backgroundImage}
+      >
+        <View style={styles.overlay} />
+      </ImageBackground>
       
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -183,6 +186,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  backgroundImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   scrollContent: {
     flexGrow: 1,

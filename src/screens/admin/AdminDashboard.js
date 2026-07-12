@@ -93,11 +93,19 @@ export default function AdminDashboard({ navigation }) {
         />
 
         <AdminCard
-          title="Scan Absensi Kelas"
-          description="Scan QR member untuk hadir"
+          title="SCAN FEATURE"
+          description="Scan QR member kelas atau paket GSC"
           icon="qr-code-outline"
           route="ClassAttendanceScan"
           gradientColors={['#111827', '#000000']}
+        />
+
+        <AdminCard
+          title="Package Manage"
+          description="Kelola paket GSC & potong jam manual"
+          icon="briefcase-outline"
+          route="GscPackageManage"
+          gradientColors={['#1a2a6c', '#b21f1f']}
         />
 
         <AdminCard

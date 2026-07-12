@@ -322,16 +322,6 @@ export default function UserDashboard({ navigation }) {
           />
         </View>
 
-        {/* Info Card */}
-        <View style={styles.infoCard}>
-          <View style={styles.infoIconContainer}>
-            <Ionicons name="information-circle" size={24} color={theme.colors.primary} />
-          </View>
-          <View style={styles.infoTextContainer}>
-            <Text style={styles.infoTitle}>Did you know?</Text>
-            <Text style={styles.infoDesc}>Members get up to 20% discount on all field bookings and priority access to events.</Text>
-          </View>
-        </View>
       </ScrollView>
       <AppModalAlert
         visible={modalState.visible}

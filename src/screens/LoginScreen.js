@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Dimensions, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Dimensions, KeyboardAvoidingView, Platform, ScrollView, Image, ImageBackground } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../config/firebase.js';
@@ -30,12 +30,11 @@ export default function LoginScreen({ navigation }) {
       
       // If the input doesn't look like an email, assume it's a phone number
       if (!finalEmail.includes('@')) {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('phoneNumber', '==', finalEmail));
-        const querySnapshot = await getDocs(q);
+        const res = await fetch(`${API_BASE_URL}/auth/get_email_by_phone?phone=${encodeURIComponent(finalEmail)}`);
+        const json = await res.json();
         
-        if (!querySnapshot.empty) {
-          finalEmail = querySnapshot.docs[0].data().email;
+        if (json.ok && json.email) {
+          finalEmail = json.email;
         } else {
           Alert.alert('Error', 'No account found with this phone number.');
           setLoading(false);
@@ -67,10 +66,13 @@ export default function LoginScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <LinearGradient
-        colors={[theme.colors.background, '#000000']}
-        style={StyleSheet.absoluteFill}
-      />
+      {/* Background Image */}
+      <ImageBackground 
+        source={require('../../assets/LOGO/BG2.jpeg')} 
+        style={styles.backgroundImage}
+      >
+        <View style={styles.overlay} />
+      </ImageBackground>
       
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -159,6 +161,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  backgroundImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   scrollContent: {
     flexGrow: 1,

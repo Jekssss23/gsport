@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Dimensions, TouchableOpacity, Text, Animated, Image } from 'react-native';
+import { View, StyleSheet, Dimensions, TouchableOpacity, Text, Animated, Image, ImageBackground } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../styles/theme';
@@ -36,16 +36,16 @@ export default function LandingScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      
-      {/* Background with Dark Gradient and subtle overlay */}
-      <LinearGradient
-        colors={[theme.colors.background, theme.colors.secondary]}
-        style={StyleSheet.absoluteFill}
-      />
-      
-      {/* Visual content */}
+
+      {/* Background Image */}
+      <ImageBackground
+        source={require('../../assets/LOGO/BG1.jpeg')}
+        style={styles.backgroundImage}
+      >
+        <View style={styles.overlay} />
+      </ImageBackground>
+
       <View style={styles.content}>
-        <View style={styles.glow} />
         <Animated.View style={[
           styles.logoContainer,
           {
@@ -63,7 +63,7 @@ export default function LandingScreen({ navigation }) {
             transform: [{ translateY: slideAnim }]
           }
         ]}>
-          <Text style={styles.title}>G SPORTS CENTER</Text>
+          <Text style={styles.title}>GSC Mobile</Text>
           <View style={styles.separator} />
           <Text style={styles.subtitle}>PREMIUM SPORTS EXPERIENCE</Text>
           <Text style={styles.subtitle2}>Futsal • Badminton • Pickleball • Class</Text>
@@ -71,24 +71,24 @@ export default function LandingScreen({ navigation }) {
       </View>
 
       {/* Action Area */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.touchableOverlay}
         onPress={() => navigation.navigate('Login')}
         activeOpacity={0.9}
       >
-         <Animated.View style={[
-           styles.tapIndicator,
-           { opacity: fadeAnim }
-         ]}>
-             <LinearGradient
-               colors={theme.gradients.primary}
-               start={{ x: 0, y: 0 }}
-               end={{ x: 1, y: 0 }}
-               style={styles.button}
-             >
-                <Text style={styles.buttonText}>GET STARTED</Text>
-             </LinearGradient>
-         </Animated.View>
+        <Animated.View style={[
+          styles.tapIndicator,
+          { opacity: fadeAnim }
+        ]}>
+          <LinearGradient
+            colors={theme.gradients.primary}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.button}
+          >
+            <Text style={styles.buttonText}>GET STARTED</Text>
+          </LinearGradient>
+        </Animated.View>
       </TouchableOpacity>
     </View>
   );
@@ -98,6 +98,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'black',
+  },
+  backgroundImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   content: {
     flex: 1,

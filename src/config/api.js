@@ -42,7 +42,8 @@ function resolveApiBaseUrl() {
     } else if (Platform.OS === 'ios') {
       host = '127.0.0.1';
     } else {
-      host = '192.168.56.1';
+      // Dev fallback — set EXPO_PUBLIC_API_BASE_URL di .env untuk device fisik
+      return 'https://management.g-sportscenter.com/api';
     }
   }
 
@@ -50,4 +51,21 @@ function resolveApiBaseUrl() {
   return `${protocol}://${host}${PROJECT_API_PATH}`;
 }
 
-export const API_BASE_URL = 'https://management.g-sportscenter.com/api';
+/** Production / dev URL — jangan hardcode terpisah dari resolver */
+export const API_BASE_URL = resolveApiBaseUrl();
+
+/** Fetch dengan timeout agar scan tidak loading tanpa batas */
+export async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error(`Server tidak merespons dalam ${Math.round(timeoutMs / 1000)} detik. Cek koneksi internet.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}

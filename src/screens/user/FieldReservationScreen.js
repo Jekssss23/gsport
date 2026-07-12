@@ -392,13 +392,26 @@ const FieldReservationScreen = ({ navigation, route }) => {
             ]}
             onPress={() => selectCourt(court)}
           >
-            {court.image_url ? (
-              <Image source={{ uri: court.image_url }} style={styles.courtImage} resizeMode="cover" />
-            ) : (
-              <View style={styles.courtPlaceholder}>
-                <Ionicons name="image-outline" size={20} color="rgba(255,255,255,0.45)" />
-              </View>
-            )}
+            {(() => {
+              const fName = selectedFacility?.name?.toLowerCase() || '';
+              const cName = court.name?.toLowerCase() || '';
+              let imgSrc = null;
+              if (fName.includes('futsal')) {
+                imgSrc = cName.includes('2') ? require('../../../assets/images/futsal2.jpeg') : require('../../../assets/images/futsal1.jpeg');
+              } else if (fName.includes('pickleball')) {
+                imgSrc = cName.includes('2') ? require('../../../assets/images/pickle2.jpeg') : require('../../../assets/images/pickle1.jpeg');
+              } else if (fName.includes('badminton')) {
+                imgSrc = require('../../../assets/images/badminton.jpeg');
+              }
+
+              return imgSrc ? (
+                <Image source={imgSrc} style={styles.courtImage} resizeMode="contain" />
+              ) : (
+                <View style={styles.courtPlaceholder}>
+                  <Ionicons name="image-outline" size={20} color="rgba(255,255,255,0.45)" />
+                </View>
+              );
+            })()}
             <Text style={[styles.courtBtnText, selectedCourt?.id === court.id && styles.courtBtnTextActive]} numberOfLines={1}>
               {court.name}
             </Text>
@@ -534,7 +547,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
             <View style={styles.qrisWrapper}>
               <View style={styles.qrisBox}>
                 <Image 
-                  source={require('../../../assets/qris-gsc-bni.jpeg')} 
+                  source={require('../../../assets/QRIS GSC.jpeg')} 
                   style={{ width: 180, height: 180, borderRadius: 10 }} 
                   resizeMode="contain" 
                 />
