@@ -4,7 +4,7 @@
     "slug": "GSC",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/LOGO/LOGO GSPORT (ABU-ABU).png",
+    "icon": "./assets/LOGO/ICON APP.jpeg",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -16,8 +16,9 @@
       "supportsTablet": true
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/LOGO/LOGO GSPORT (ABU-ABU).png",
+        "foregroundImage": "./assets/LOGO/ICON APP.jpeg",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -26,16 +27,16 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "G.Sports.Center"
+      "package": "com.gsportscenter.app"
     },
     "web": {
-      "favicon": "./assets/LOGO/LOGO GSPORT (ABU-ABU).png"
+      "favicon": "./assets/LOGO/ICON APP.jpeg"
     },
     "plugins": [
       [
         "expo-notifications",
         {
-          "icon": "./assets/LOGO/LOGO GSPORT (ABU-ABU).png",
+          "icon": "./assets/LOGO/ICON APP.jpeg",
           "color": "#E31E24",
           "defaultChannel": "default",
           "sounds": []
@@ -49,7 +50,7 @@
       ]
     ],
     "notification": {
-      "icon": "./assets/LOGO/LOGO GSPORT (ABU-ABU).png",
+      "icon": "./assets/LOGO/ICON APP.jpeg",
       "color": "#E31E24",
       "androidMode": "default",
       "androidCollapsedTitle": "G Sports Center"

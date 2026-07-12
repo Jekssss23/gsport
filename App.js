@@ -20,6 +20,7 @@ import AdminClassAttendanceScanScreen from './src/screens/admin/ClassAttendanceS
 import ClassSchedulingScreen from './src/screens/admin/ClassSchedulingScreen';
 import UserReservationHistoryScreen from './src/screens/admin/UserReservationHistoryScreen';
 import RatingMeScreen from './src/screens/admin/RatingMeScreen';
+import GscPackageManageScreen from './src/screens/admin/GscPackageManageScreen';
 import EventScreen from './src/screens/common/EventScreen';
 import UserDashboard from './src/screens/user/UserDashboard';
 import FieldReservationScreen from './src/screens/user/FieldReservationScreen';
@@ -53,6 +54,7 @@ function AdminStack() {
       <Stack.Screen name="ClassScheduling" component={ClassSchedulingScreen} options={{ headerShown: false }} />
       <Stack.Screen name="UserReservationHistory" component={UserReservationHistoryScreen} options={{ headerShown: false }} />
       <Stack.Screen name="RatingMe" component={RatingMeScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="GscPackageManage" component={GscPackageManageScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Events" component={EventScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
