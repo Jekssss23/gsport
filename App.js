@@ -31,6 +31,12 @@ import BuyPackageScreen from './src/screens/user/BuyPackageScreen';
 import NotificationScreen from './src/screens/user/NotificationScreen';
 import ETicketScreen from './src/screens/user/ETicketScreen';
 import ClassAttendanceScanScreen from './src/screens/user/ClassAttendanceScanScreen';
+import TutorialAlatGymScreen from './src/screens/user/gym/TutorialAlatGymScreen';
+import CountCaloriesScreen from './src/screens/user/gym/CountCaloriesScreen';
+import PersonalTrainerScreen from './src/screens/user/gym/PersonalTrainerScreen';
+import ActivitiesScreen from './src/screens/user/gym/ActivitiesScreen';
+import ScanCaloriScreen from './src/screens/user/gym/ScanCaloriScreen';
+import RiwayatKaloriScreen from './src/screens/user/gym/RiwayatKaloriScreen';
 
 const SPLASH_IMAGES = [
   require('./assets/images/pickle.jpg'),
@@ -86,6 +92,12 @@ function UserStack() {
       <Stack.Screen name="Events" component={EventScreen} options={{ headerShown: false }} />
       <Stack.Screen name="EventDetail" component={EventDetailScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ClassAttendanceScan" component={ClassAttendanceScanScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="GymTutorial" component={TutorialAlatGymScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="GymCalories" component={CountCaloriesScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="GymTrainer" component={PersonalTrainerScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="GymActivities" component={ActivitiesScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="GymScanCalories" component={ScanCaloriScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="GymCaloriesHistory" component={RiwayatKaloriScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
