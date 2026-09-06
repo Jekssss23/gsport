@@ -1,54 +1,55 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 
-const BRUTALIST = {
-  bg: '#0a0a0a',
-  cardBg: '#f5f5f0',
-  yellow: '#f5e642',
-  black: '#0a0a0a',
-  border: 3,
-  shadow: { shadowColor: '#0a0a0a', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 6 },
-};
-
 const GYM_MENUS = [
-  { icon: 'book', title: 'Tutorial Alat GYM' },
-  { icon: 'flame', title: 'Count Calories' },
-  { icon: 'person', title: 'Personal Trainer' },
-  { icon: 'pulse', title: 'Activities' },
+  { key: 'GymTutorial', icon: 'book-outline', title: 'Tutorial Alat Gym', desc: 'Panduan pakai alat gym' },
+  { key: 'GymCalories', icon: 'flame-outline', title: 'Count Calories', desc: 'Hitung kalori latihan' },
+  { key: 'GymTrainer', icon: 'person-outline', title: 'Personal Trainer', desc: 'Latihan bersama trainer' },
+  { key: 'GymActivities', icon: 'pulse-outline', title: 'Activities', desc: 'Aktivitas gym hari ini' },
 ];
 
 export default function GymScreen({ navigation }) {
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
+      <StatusBar style="light" />
+      <LinearGradient
+        colors={[theme.colors.background, '#000000']}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
           <Text style={styles.headerTag}>GSC MOBILE</Text>
-          <Text style={styles.headerTitle}>GYM</Text>
+          <Text style={styles.headerTitle}>Gym</Text>
+          <Text style={styles.headerSubtitle}>Pusat kebugaran G-Sports Center</Text>
         </View>
-        <View style={styles.headerBadge}>
-          <Ionicons name="barbell" size={18} color={BRUTALIST.yellow} />
-        </View>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.heroCard}>
-          <Text style={styles.heroTag}>G-SPORTS CENTER</Text>
-          <Text style={styles.heroTitle}>GYM CENTER</Text>
-          <Text style={styles.heroDesc}>Latihan bebas & kelas gym untuk semua member</Text>
-        </View>
-
         <View style={styles.grid}>
-          {GYM_MENUS.map((item, i) => (
-            <TouchableOpacity key={i} style={styles.menuCard} activeOpacity={0.85}>
-              <View style={styles.menuIcon}>
-                <Ionicons name={item.icon} size={26} color={BRUTALIST.black} />
-              </View>
-              <Text style={styles.menuTitle}>{item.title}</Text>
-              <View style={styles.menuArrow}>
-                <Ionicons name="arrow-forward" size={14} color={BRUTALIST.yellow} />
-              </View>
+          {GYM_MENUS.map((item) => (
+            <TouchableOpacity
+              key={item.key}
+              style={styles.menuCard}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate(item.key)}
+            >
+              <LinearGradient
+                colors={theme.gradients.premium}
+                style={styles.menuGradient}
+              >
+                <View style={styles.menuIconWrap}>
+                  <Ionicons name={item.icon} size={24} color={theme.colors.primary} />
+                </View>
+                <Text style={styles.menuTitle}>{item.title}</Text>
+                <Text style={styles.menuDesc}>{item.desc}</Text>
+                <View style={styles.menuArrow}>
+                  <Ionicons name="arrow-forward" size={14} color="#fff" />
+                </View>
+              </LinearGradient>
             </TouchableOpacity>
           ))}
         </View>
@@ -58,117 +59,123 @@ export default function GymScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BRUTALIST.bg },
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 120,
+  },
   header: {
-    paddingTop: 60,
-    paddingBottom: 14,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    backgroundColor: BRUTALIST.black,
-    borderBottomWidth: BRUTALIST.border,
-    borderBottomColor: BRUTALIST.black,
+    marginTop: 20,
+    marginBottom: 25,
   },
   headerTag: {
-    color: '#888',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 2,
+    color: theme.colors.textTertiary,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 3,
     textTransform: 'uppercase',
-    marginBottom: 2,
+    marginBottom: 5,
   },
   headerTitle: {
     color: '#ffffff',
-    fontSize: 22,
+    fontSize: 30,
     fontWeight: '900',
     letterSpacing: -0.5,
+    marginBottom: 4,
   },
-  headerBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 0,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: BRUTALIST.border,
-    borderColor: BRUTALIST.black,
-    ...BRUTALIST.shadow,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 120,
-    gap: 12,
+  headerSubtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
   },
   heroCard: {
-    backgroundColor: BRUTALIST.yellow,
-    borderWidth: BRUTALIST.border,
-    borderColor: BRUTALIST.black,
-    padding: 16,
-    ...BRUTALIST.shadow,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: theme.borderRadius.large,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+    marginBottom: 25,
+    overflow: 'hidden',
+    ...theme.shadows.heavy,
   },
-  heroTag: {
-    color: '#555',
-    fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    marginBottom: 4,
+  heroIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(230, 0, 0, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(230, 0, 0, 0.4)',
+    marginRight: 16,
+  },
+  heroBody: {
+    flex: 1,
   },
   heroTitle: {
-    color: BRUTALIST.black,
-    fontSize: 26,
+    color: '#ffffff',
+    fontSize: 18,
     fontWeight: '900',
-    letterSpacing: -0.5,
-    marginBottom: 4,
+    letterSpacing: 1,
+    marginBottom: 5,
   },
   heroDesc: {
-    color: '#333',
-    fontSize: 11,
-    fontWeight: '600',
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 14,
   },
   menuCard: {
     width: '47%',
     flexGrow: 1,
-    backgroundColor: BRUTALIST.cardBg,
-    borderWidth: BRUTALIST.border,
-    borderColor: BRUTALIST.black,
-    padding: 12,
-    ...BRUTALIST.shadow,
+    borderRadius: theme.borderRadius.large,
+    overflow: 'hidden',
+    ...theme.shadows.medium,
   },
-  menuIcon: {
-    width: 46,
-    height: 46,
-    backgroundColor: BRUTALIST.yellow,
-    borderWidth: 2,
-    borderColor: BRUTALIST.black,
-    borderRadius: 0,
+  menuGradient: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+    minHeight: 150,
+  },
+  menuIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(230, 0, 0, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   menuTitle: {
-    color: BRUTALIST.black,
-    fontSize: 13,
-    fontWeight: '900',
-    lineHeight: 17,
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  menuDesc: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 15,
     flexShrink: 1,
   },
   menuArrow: {
-    marginTop: 10,
-    alignSelf: 'flex-end',
-    backgroundColor: BRUTALIST.black,
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
     width: 24,
     height: 24,
-    borderRadius: 0,
+    borderRadius: 12,
+    backgroundColor: theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: BRUTALIST.black,
   },
 });
