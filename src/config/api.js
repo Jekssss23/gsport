@@ -40,7 +40,8 @@ function resolveApiBaseUrl() {
       // Emulator: host machine. Device fisik: host dari Expo biasanya sudah terisi di atas.
       host = '10.0.2.2';
     } else if (Platform.OS === 'ios') {
-      host = '127.0.0.1';
+      // iOS Simulator di Mac tidak bisa akses localhost Windows → gunakan production API
+      return 'https://management.g-sportscenter.com/api';
     } else {
       // Dev fallback — set EXPO_PUBLIC_API_BASE_URL di .env untuk device fisik
       return 'https://management.g-sportscenter.com/api';

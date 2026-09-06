@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AppModalAlert from '../../components/AppModalAlert';
 import { API_BASE_URL } from '../../config/api';
+import { handleGoogleSignOut } from '../../services/GoogleAuthService';
 
 const { width } = Dimensions.get('window');
 
@@ -132,6 +133,7 @@ export default function AdminDashboard({ navigation }) {
         buttonLabel="Ya, Keluar"
         onClose={() => {
           setLogoutPopup(false);
+          handleGoogleSignOut();
           signOut(auth).catch(error => console.error('Error signing out: ', error));
         }}
       />

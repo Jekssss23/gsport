@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { APP_LOGO_PRIMARY } from '../constants/assets';
 import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
+import { useGoogleAuthRequest, handleGoogleSignIn } from '../services/GoogleAuthService';
 
 const { width } = Dimensions.get('window');
 
@@ -17,6 +18,8 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const { request, promptAsync } = useGoogleAuthRequest();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -63,12 +66,28 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    if (!request) {
+      Alert.alert('Error', 'Google Sign-In is not available on this device');
+      return;
+    }
+
+    setGoogleLoading(true);
+    try {
+      await handleGoogleSignIn(promptAsync);
+    } catch (error) {
+      Alert.alert('Google Login Error', getUserFriendlyErrorMessage(error, 'Google login failed. Please try again.'));
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
       {/* Background Image */}
       <ImageBackground 
-        source={require('../../assets/LOGO/BG2.jpeg')} 
+        source={require('../../assets/LOGO/BG3.jpg')} 
         style={styles.backgroundImage}
       >
         <View style={styles.overlay} />
@@ -82,7 +101,6 @@ export default function LoginScreen({ navigation }) {
           <View style={styles.header}>
             <Image source={APP_LOGO_PRIMARY} style={styles.logoImage} resizeMode="contain" />
             <Text style={styles.welcomeTitle}>Welcome Back</Text>
-            <Text style={styles.welcomeSubtitle}>Sign in to continue your journey</Text>
           </View>
 
           <View style={styles.formContainer}>
@@ -139,7 +157,6 @@ export default function LoginScreen({ navigation }) {
                   style={styles.gradientButton}
                 >
                   <Text style={styles.loginButtonText}>LOGIN</Text>
-                  <Ionicons name="arrow-forward" size={20} color="white" />
                 </LinearGradient>
               </TouchableOpacity>
             )}
@@ -149,6 +166,36 @@ export default function LoginScreen({ navigation }) {
               <TouchableOpacity onPress={() => navigation.navigate('Register')}>
                 <Text style={styles.signUpText}>Create Account</Text>
               </TouchableOpacity>
+            </View>
+
+            {/* Social Login Buttons */}
+            <View style={styles.socialSection}>
+              <View style={styles.socialDivider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or continue with</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <View style={styles.socialButtonsRow}>
+                <TouchableOpacity 
+                  style={styles.socialButton} 
+                  activeOpacity={0.7}
+                  onPress={handleGoogleLogin}
+                  disabled={googleLoading || !request}
+                >
+                  {googleLoading ? (
+                    <ActivityIndicator size="small" color={theme.colors.text} />
+                  ) : (
+                    <Ionicons name="logo-google" size={22} color={theme.colors.text} style={styles.socialIcon} />
+                  )}
+                  <Text style={styles.socialButtonText}>Google</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
+                  <Ionicons name="logo-apple" size={22} color={theme.colors.text} style={styles.socialIcon} />
+                  <Text style={styles.socialButtonText}>Apple</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -173,13 +220,13 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 30,
-    paddingTop: 80,
-    paddingBottom: 40,
+    paddingHorizontal: 28,
+    paddingTop: 60,
+    paddingBottom: 30,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 50,
+    marginBottom: 36,
   },
   logoImage: {
     width: 140,
@@ -232,46 +279,94 @@ const styles = StyleSheet.create({
   },
   forgotPassword: {
     alignSelf: 'flex-end',
-    marginBottom: 30,
+    marginBottom: 24,
   },
   forgotPasswordText: {
     color: theme.colors.primary,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
   },
   loginButton: {
     borderRadius: theme.borderRadius.medium,
     overflow: 'hidden',
-    ...theme.shadows.medium,
+    ...theme.shadows.light,
   },
   gradientButton: {
-    height: 55,
-    flexDirection: 'row',
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
   },
   loginButtonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    letterSpacing: 2,
-    marginRight: 10,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 1.5,
   },
   loader: {
-    marginVertical: 10,
+    marginVertical: 8,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 40,
+    marginTop: 28,
   },
   footerText: {
     color: theme.colors.textSecondary,
-    fontSize: 14,
+    fontSize: 13,
   },
   signUpText: {
     color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  socialSection: {
+    marginTop: 24,
+  },
+  socialDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: theme.colors.glassBorder,
+    maxWidth: 90,
+  },
+  dividerText: {
+    color: theme.colors.textTertiary,
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginHorizontal: 12,
+  },
+  socialButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+    borderRadius: theme.borderRadius.medium,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    gap: 8,
+    minWidth: (width - 60 - 24) / 2, // half screen minus padding and gap
+  },
+  socialIcon: {
+    marginRight: 2,
+  },
+  socialButtonText: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
 });

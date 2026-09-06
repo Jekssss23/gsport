@@ -160,13 +160,12 @@ export default function MyReservationHistoryScreen({ navigation }) {
       <LinearGradient colors={[theme.colors.background, '#000000']} style={StyleSheet.absoluteFill} />
       
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="white" />
-        </TouchableOpacity>
+        <View style={styles.backButton} />
         <View>
           <Text style={styles.headerTitle}>My Bookings</Text>
           <Text style={styles.headerSubtitle}>{bookings.length} reservations found</Text>
         </View>
+        <View style={styles.backButton} />
       </View>
 
       <ScrollView
@@ -329,6 +328,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 25,
     paddingTop: 10,
+    paddingBottom: 100,
   },
   emptyContainer: {
     alignItems: 'center',

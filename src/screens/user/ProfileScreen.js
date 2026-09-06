@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
-import { deleteUser } from 'firebase/auth';
+import { deleteUser, signOut } from 'firebase/auth';
 import { auth, db } from '../../config/firebase';
 import { theme } from '../../styles/theme';
 import { getUserFriendlyErrorMessage } from '../../utils/errorMessages';
+import { handleGoogleSignOut } from '../../services/GoogleAuthService';
 
 export default function ProfileScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
@@ -92,6 +93,20 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Apakah kamu yakin ingin logout?', [
+      { text: 'Batal', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: () => {
+          handleGoogleSignOut();
+          signOut(auth).catch(error => console.error('Error signing out: ', error));
+        },
+      },
+    ]);
+  };
+
 
   if (loading) {
     return (
@@ -104,11 +119,7 @@ export default function ProfileScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
-          <Ionicons name="arrow-back" size={22} color="white" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile Saya</Text>
-        <View style={styles.iconBtn} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.note}>Foto profil belum bisa diubah untuk saat ini.</Text>
@@ -138,6 +149,11 @@ export default function ProfileScreen({ navigation }) {
         <TouchableOpacity style={styles.deleteBtn} onPress={confirmDelete} disabled={saving}>
           <Text style={styles.deleteText}>Hapus Akun</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} disabled={saving}>
+          <Ionicons name="log-out-outline" size={18} color={theme.colors.primary} />
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -146,10 +162,10 @@ export default function ProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background },
-  header: { paddingTop: 56, paddingHorizontal: 18, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerTitle: { color: 'white', fontSize: 18, fontWeight: '800' },
+  header: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(15, 15, 15, 0.8)' },
+  headerTitle: { color: 'white', fontSize: 20, fontWeight: '800' },
   iconBtn: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-  content: { padding: 20, paddingBottom: 44 },
+  content: { padding: 20, paddingBottom: 120 },
   note: { color: theme.colors.textSecondary, marginBottom: 14, fontSize: 12 },
   label: { color: 'white', fontSize: 12, fontWeight: '700', marginBottom: 6, marginTop: 10 },
   input: {
@@ -181,5 +197,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   deleteText: { color: 'red', fontWeight: '800' },
+  logoutBtn: {
+    marginTop: 15,
+    backgroundColor: 'rgba(230, 0, 0, 0.08)',
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  logoutText: { color: theme.colors.primary, fontWeight: '800' },
 });
 

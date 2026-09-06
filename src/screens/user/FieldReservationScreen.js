@@ -22,6 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { getUserFriendlyErrorMessage } from '../../utils/errorMessages';
 import AppModalAlert from '../../components/AppModalAlert';
+import LoadingAnimation from '../../../assets/ui/LoadingAnimation';
 
 const { width } = Dimensions.get('window');
 
@@ -314,7 +315,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
         title: 'Booking Berhasil',
         message: 'Reservasi berhasil dibuat. Kamu bisa cek detailnya di My History.',
         type: 'success',
-        onCloseAction: () => navigation.navigate('MyReservationHistory'),
+        onCloseAction: () => navigation.navigate('History'),
       });
     } catch (error) {
       console.error('Booking error:', error);
@@ -330,30 +331,49 @@ const FieldReservationScreen = ({ navigation, route }) => {
   const renderFacilityStep = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.sectionHeader}>Choose Facility</Text>
+      <Text style={styles.sectionSubtext}>Silahkan pilih fasilitas lapangan olahraga yang ingin di booking</Text>
       {loadingFacilities ? (
         <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 50 }} />
       ) : (
         <View style={styles.facilityGrid}>
-          {facilities.map((facility) => (
-            <TouchableOpacity 
-              key={facility.id} 
-              style={styles.facilityCard}
-              onPress={() => selectFacility(facility)}
-              activeOpacity={0.9}
-            >
-              <LinearGradient
-                colors={['#2A2A2A', '#0F0F0F']}
-                style={styles.facilityGradient}
+          {facilities.map((facility) => {
+            const fName = facility.name?.toLowerCase() || '';
+            let imgSrc = null;
+            if (fName.includes('futsal')) imgSrc = require('../../../assets/images/futsal.png');
+            else if (fName.includes('badminton')) imgSrc = require('../../../assets/images/badminton.png');
+            else if (fName.includes('pickle')) imgSrc = require('../../../assets/images/pickleball.png');
+
+            return (
+              <TouchableOpacity
+                key={facility.id}
+                style={styles.facilityCardOuter}
+                onPress={() => selectFacility(facility)}
+                activeOpacity={0.9}
               >
-                <View style={styles.facilityIconCircle}>
-                  <Ionicons name="tennisball" size={24} color={theme.colors.primary} />
-                </View>
-                <Text style={styles.facilityNameText}>{facility.name}</Text>
-                <Text style={styles.facilityPriceText}>From {facility.pricePerHour / 1000}k/hr</Text>
-                <Ionicons name="chevron-forward-circle" size={24} color="rgba(255,255,255,0.1)" style={styles.facilityArrow} />
-              </LinearGradient>
-            </TouchableOpacity>
-          ))}
+                <LinearGradient
+                  colors={['#ffffff', '#0c0d0d']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.facilityCardBorder}
+                >
+                  <View style={styles.facilityCardInner}>
+                    <View style={styles.facilityRay} />
+                    <View style={styles.facilityLineTop} />
+                    <View style={styles.facilityLineBottom} />
+                    <View style={styles.facilityLineLeft} />
+                    <View style={styles.facilityLineRight} />
+                    <View style={styles.facilityDot} />
+                    {imgSrc ? (
+                      <Image source={imgSrc} style={styles.facilityIconImg} resizeMode="contain" />
+                    ) : (
+                      <Ionicons name="help-outline" size={28} color="#ffffff" style={styles.facilityIconTiny} />
+                    )}
+                    <Text style={styles.facilityNameText}>{facility.name}</Text>
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
     </View>
@@ -363,6 +383,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
     <View style={styles.stepContainer}>
       {/* Date Picker */}
       <Text style={styles.sectionHeader}>Select Date</Text>
+      <Text style={styles.sectionSubtext}>Silahkan Pilih Tanggal Bookingan sesuai ketersediaan tanggal di bawah ini</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateScroll}>
         {dateOptions.map((date) => (
           <TouchableOpacity 
@@ -382,6 +403,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
 
       {/* Court Selection */}
       <Text style={[styles.sectionHeader, { marginTop: 25 }]}>Select Court</Text>
+      <Text style={styles.sectionSubtext}>Silahkan pilih lapangan yang ingin anda tempati</Text>
       <View style={styles.courtGrid}>
         {selectedFacility?.courts?.map((court) => (
           <TouchableOpacity 
@@ -405,7 +427,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
               }
 
               return imgSrc ? (
-                <Image source={imgSrc} style={styles.courtImage} resizeMode="contain" />
+                <Image source={imgSrc} style={styles.courtImage} resizeMode="cover" />
               ) : (
                 <View style={styles.courtPlaceholder}>
                   <Ionicons name="image-outline" size={20} color="rgba(255,255,255,0.45)" />
@@ -423,8 +445,9 @@ const FieldReservationScreen = ({ navigation, route }) => {
       {selectedCourt && (
         <View style={{ marginTop: 25 }}>
           <Text style={styles.sectionHeader}>Available Slots</Text>
+          <Text style={styles.sectionSubtext}>Pilih jam sesuai ketersediaan</Text>
           {loadingSlots ? (
-            <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginTop: 20 }} />
+            <LoadingAnimation />
           ) : (
             <View style={styles.slotGrid}>
               {availableSlots.map((slotObj) => {
@@ -492,7 +515,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
           onPress={() => setStep(3)}
         >
           <LinearGradient colors={theme.gradients.primary} style={styles.primaryBtnGradient}>
-            <Text style={styles.primaryBtnText}>Proceed to Payment</Text>
+            <Text style={styles.primaryBtnText}>Bayar Sekarang</Text>
             <Ionicons name="arrow-forward" size={20} color="white" />
           </LinearGradient>
         </TouchableOpacity>
@@ -504,10 +527,10 @@ const FieldReservationScreen = ({ navigation, route }) => {
     const { total, dp, remaining } = calculateTotal();
     return (
       <View style={styles.stepContainer}>
+        <Text style={styles.sectionHeader}>Rincian Booking</Text>
+        <Text style={styles.sectionSubtext}>Pembayaran di aplikasi di lakukan untuk pembayaran DP terlebih dahulu sesuai nominal rincian di bawah ( WAJIB!!) , ketika sudah selesai maka kamu akan mendapatkan E-ticket nantinya.</Text>
         <View style={styles.summaryCard}>
           <LinearGradient colors={['#2A2A2A', '#1A1A1A']} style={styles.summaryGradient}>
-            <Text style={styles.summaryTitle}>Booking Summary</Text>
-            <View style={styles.summaryDivider} />
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Facility</Text>
               <Text style={styles.summaryValue}>{selectedFacility.name} - {selectedCourt.name}</Text>
@@ -526,11 +549,11 @@ const FieldReservationScreen = ({ navigation, route }) => {
               <Text style={styles.totalPrice}>Rp {total.toLocaleString('id-ID')}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Down Payment ({selectedFacility.dpPercentage}%)</Text>
+              <Text style={styles.summaryLabel}>DP ({selectedFacility.dpPercentage}%)</Text>
               <Text style={styles.dpPrice}>Rp {dp.toLocaleString('id-ID')}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Remaining Payment</Text>
+              <Text style={styles.summaryLabel}>Remaining</Text>
               <Text style={styles.remainingPrice}>Rp {remaining.toLocaleString('id-ID')}</Text>
             </View>
           </LinearGradient>
@@ -542,7 +565,12 @@ const FieldReservationScreen = ({ navigation, route }) => {
             style={styles.paymentGradient}
           >
             <Text style={styles.paymentTitle}>Scan QRIS</Text>
-            <Text style={styles.paymentDesc}>Scan this code with any e-wallet or mobile banking app to pay the Down Payment.</Text>
+            <Text style={styles.paymentDesc}>
+              Scan QR di bawah ini di E-wallet atau E-bank lainnya dan wajib input nominal sesuai DP rincian di atas!.
+            </Text>
+            <Text style={styles.paymentDescBold}>
+              Jika ada kesalahan nominal bayar maka tidak berkenan melakukan pembayaran ulang maupun pengembalian DP.
+            </Text>
             
             <View style={styles.qrisWrapper}>
               <View style={styles.qrisBox}>
@@ -563,6 +591,7 @@ const FieldReservationScreen = ({ navigation, route }) => {
         </View>
 
         <Text style={[styles.sectionHeader, { marginTop: 25 }]}>Upload Payment Proof</Text>
+        <Text style={styles.sectionSubtext}>Upload Bukti pembayaran Kamu di sini ya</Text>
         <TouchableOpacity style={styles.uploadArea} onPress={pickImage} activeOpacity={0.8}>
           {paymentProof ? (
             <Image source={{ uri: paymentProof.uri }} style={styles.uploadedImg} />
@@ -601,10 +630,15 @@ const FieldReservationScreen = ({ navigation, route }) => {
       <LinearGradient colors={[theme.colors.background, '#000000']} style={StyleSheet.absoluteFill} />
       
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => step === 1 ? navigation.goBack() : setStep(step - 1)}>
-          <Ionicons name="arrow-back" size={24} color="white" />
-        </TouchableOpacity>
+        {step > 1 ? (
+          <TouchableOpacity style={styles.backButton} onPress={() => setStep(step - 1)}>
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerSpacer} />
+        )}
         <Text style={styles.headerTitle}>Reserve Field</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
       {/* Step Indicators */}
@@ -658,14 +692,21 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
     borderWidth: 1,
     borderColor: theme.colors.glassBorder,
+  },
+  headerSpacer: {
+    width: 40,
+    height: 40,
   },
   headerTitle: {
     color: 'white',
     fontSize: 20,
     fontWeight: 'bold',
+    textAlign: 'center',
+    flex: 1,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   stepIndicator: {
     flexDirection: 'row',
@@ -712,6 +753,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 25,
     paddingTop: 10,
+    paddingBottom: 100,
   },
   stepContainer: {
     flex: 1,
@@ -720,65 +762,126 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '800',
-    marginBottom: 20,
+    marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 1.5,
+  },
+  sectionSubtext: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    marginBottom: 20,
+    lineHeight: 18,
   },
   facilityGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-  facilityCard: {
+  facilityCardOuter: {
     width: (width - 65) / 2,
     height: 160,
-    borderRadius: theme.borderRadius.large,
-    overflow: 'hidden',
+    borderRadius: 10,
     marginBottom: 15,
-    ...theme.shadows.medium,
   },
-  facilityGradient: {
+  facilityCardBorder: {
     flex: 1,
-    padding: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 10,
+    padding: 1,
   },
-  facilityIconCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    justifyContent: 'center',
+  facilityCardInner: {
+    flex: 1,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#202222',
+    background: 'radial-gradient(circle at 0% 0%, #444444, #0c0d0d)',
+    backgroundColor: '#0c0d0d',
     alignItems: 'center',
-    marginBottom: 15,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  facilityRay: {
+    position: 'absolute',
+    width: 220,
+    height: 45,
+    borderRadius: 100,
+    backgroundColor: 'rgba(199, 199, 199, 0.15)',
+    top: -10,
+    left: -40,
+    transform: [{ rotate: '40deg' }],
+  },
+  facilityLineTop: {
+    position: 'absolute',
+    top: '10%',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: '#888',
+    opacity: 0.3,
+  },
+  facilityLineBottom: {
+    position: 'absolute',
+    bottom: '10%',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: '#2c2c2c',
+  },
+  facilityLineLeft: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '10%',
+    width: 1,
+    backgroundColor: '#747474',
+    opacity: 0.3,
+  },
+  facilityLineRight: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    right: '10%',
+    width: 1,
+    backgroundColor: '#2c2c2c',
+  },
+  facilityDot: {
+    position: 'absolute',
+    width: 5,
+    height: 5,
+    borderRadius: 100,
+    backgroundColor: '#fff',
+    top: '10%',
+    right: '10%',
+    shadowColor: '#ffffff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  facilityIconTiny: {
+    marginBottom: 8,
+  },
+  facilityIconImg: {
+    width: 40,
+    height: 40,
+    marginBottom: 8,
   },
   facilityNameText: {
-    color: 'white',
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 4,
-  },
-  facilityPriceText: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-  },
-  facilityArrow: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
   },
   dateScroll: {
     paddingBottom: 10,
   },
   dateCard: {
-    width: 70,
-    height: 90,
+    width: 54,
+    height: 70,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.medium,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 8,
     borderWidth: 1,
     borderColor: theme.colors.glassBorder,
   },
@@ -826,15 +929,20 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primary,
   },
   courtBtnText: {
-    color: theme.colors.textSecondary,
+    color: 'white',
     fontWeight: '600',
     marginBottom: 10,
+    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   courtBtnTextActive: {
     color: 'white',
   },
   courtImage: {
     ...StyleSheet.absoluteFillObject,
+    width: null,
+    height: null,
   },
   courtPlaceholder: {
     ...StyleSheet.absoluteFillObject,
@@ -896,14 +1004,14 @@ const styles = StyleSheet.create({
     ...theme.shadows.medium,
   },
   primaryBtnGradient: {
-    height: 55,
+    height: 44,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
   },
   primaryBtnText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     marginRight: 10,
   },
@@ -913,31 +1021,25 @@ const styles = StyleSheet.create({
     ...theme.shadows.heavy,
   },
   summaryGradient: {
-    padding: 24,
-  },
-  summaryTitle: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
+    padding: 16,
   },
   summaryDivider: {
     height: 1,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    marginVertical: 15,
+    marginVertical: 10,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   summaryLabel: {
     color: theme.colors.textSecondary,
-    fontSize: 14,
+    fontSize: 12,
   },
   summaryValue: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     flex: 1,
     textAlign: 'right',
@@ -945,17 +1047,17 @@ const styles = StyleSheet.create({
   },
   totalPrice: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   dpPrice: {
     color: theme.colors.primary,
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   remainingPrice: {
     color: 'rgba(255,255,255,0.85)',
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
   },
   staffEmptyText: {
@@ -1036,9 +1138,17 @@ const styles = StyleSheet.create({
   },
   paymentDesc: {
     color: theme.colors.textSecondary,
-    fontSize: 13,
+    fontSize: 12,
     textAlign: 'center',
     lineHeight: 18,
+    marginBottom: 10,
+  },
+  paymentDescBold: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+    fontWeight: 'bold',
     marginBottom: 25,
   },
   qrisWrapper: {

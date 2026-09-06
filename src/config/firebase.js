@@ -18,20 +18,15 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
-// Fix: Prevent "auth/already-initialized" error by checking existing apps
+// Selalu initializeAuth dengan persistence (aman untuk hot reload & production)
 let firebaseAuth;
-if (getApps().length > 0) {
-  try {
-    firebaseAuth = getAuth(app);
-  } catch (e) {
-    firebaseAuth = initializeAuth(app, {
-      persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-    });
-  }
-} else {
+try {
   firebaseAuth = initializeAuth(app, {
     persistence: getReactNativePersistence(ReactNativeAsyncStorage)
   });
+} catch (e) {
+  // Jika sudah di-initialize, ambil instance yang sudah ada
+  firebaseAuth = getAuth(app);
 }
 
 export const auth = firebaseAuth;

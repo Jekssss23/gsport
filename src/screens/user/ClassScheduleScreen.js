@@ -296,9 +296,7 @@ const ClassScheduleScreen = ({ navigation }) => {
         style={styles.header}
       >
         <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="white" />
-          </TouchableOpacity>
+          <View style={{ width: 24 }} />
           <Text style={styles.headerTitle}>Jadwal Kelas</Text>
           <TouchableOpacity onPress={onRefresh}>
             <Ionicons name="refresh" size={24} color="white" />
@@ -308,6 +306,7 @@ const ClassScheduleScreen = ({ navigation }) => {
 
       <ScrollView
         style={styles.content}
+        contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }

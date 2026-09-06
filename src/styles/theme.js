@@ -18,6 +18,11 @@ export const theme = {
     glass: 'rgba(255, 255, 255, 0.05)',
     glassBorder: 'rgba(255, 255, 255, 0.1)',
   },
+  fonts: {
+    regular: 'Humane-Regular',
+    medium: 'Humane-Medium',
+    bold: 'Humane-Medium', // Using Medium as bold since no Bold variant
+  },
   gradients: {
     primary: ['#FF0000', '#800000'],
     dark: ['#1A1A1A', '#000000'],
