@@ -14,6 +14,30 @@
       },
       "oauth_client": [
         {
+          "client_id": "253539109830-7b78g2rmq58aoasic4fsdl41219nds0a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gsportscenter.app",
+            "certificate_hash": "fdd9a00fda627530f8d0fe146f4a41c2bec298a8"
+          }
+        },
+        {
+          "client_id": "253539109830-7ickndphvclctrfcrrmkf9qgngnb1n2u.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gsportscenter.app",
+            "certificate_hash": "2117da8526024cc93ddf3e5e6b6045ec7f9ff395"
+          }
+        },
+        {
+          "client_id": "253539109830-0a8lfqdee50urg9qt5jbjd29pq7m37s7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gsportscenter.app",
+            "certificate_hash": "05730c88ad2807f67d8d35938519a4a6470fd3dc"
+          }
+        },
+        {
           "client_id": "253539109830-gnhd2rd14n7ourhiap23s8t1jer3ta8q.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -29,6 +53,13 @@
             {
               "client_id": "253539109830-gnhd2rd14n7ourhiap23s8t1jer3ta8q.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "253539109830-e2bq76gq9jh10e51b06upf84tv8blkbj.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.gsportscenter.app"
+              }
             }
           ]
         }
