@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { APP_LOGO_PRIMARY } from '../constants/assets';
 import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
 import { useGoogleAuthRequest, handleGoogleSignIn } from '../services/GoogleAuthService';
+import { handleAppleSignIn } from '../services/AppleAuthService';
 
 const { width } = Dimensions.get('window');
 
@@ -22,6 +23,7 @@ export default function LoginScreen(props) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   const { request, promptAsync } = useGoogleAuthRequest();
 
   const handleLogin = async () => {
@@ -82,6 +84,20 @@ export default function LoginScreen(props) {
       Alert.alert('Google Login Error', getUserFriendlyErrorMessage(error, 'Google login failed. Please try again.'));
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    setAppleLoading(true);
+    try {
+      const res = await handleAppleSignIn();
+      if (res?.cancelled) {
+        return;
+      }
+    } catch (error) {
+      Alert.alert('Apple Login Error', getUserFriendlyErrorMessage(error, 'Apple login failed. Please try again.'));
+    } finally {
+      setAppleLoading(false);
     }
   };
 
@@ -207,8 +223,17 @@ export default function LoginScreen(props) {
                   <Text style={styles.socialButtonText}>Google</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-                  <Ionicons name="logo-apple" size={22} color={theme.colors.text} style={styles.socialIcon} />
+                <TouchableOpacity 
+                  style={styles.socialButton} 
+                  activeOpacity={0.7}
+                  onPress={handleAppleLogin}
+                  disabled={appleLoading || googleLoading || loading}
+                >
+                  {appleLoading ? (
+                    <ActivityIndicator size="small" color={theme.colors.text} />
+                  ) : (
+                    <Ionicons name="logo-apple" size={22} color={theme.colors.text} style={styles.socialIcon} />
+                  )}
                   <Text style={styles.socialButtonText}>Apple</Text>
                 </TouchableOpacity>
               </View>
