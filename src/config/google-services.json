@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "253539109830",
+    "project_id": "g-sports-center",
+    "storage_bucket": "g-sports-center.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:253539109830:android:fff9aa403e466684a800c7",
+        "android_client_info": {
+          "package_name": "com.gsportscenter.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "253539109830-gnhd2rd14n7ourhiap23s8t1jer3ta8q.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD_b3KELig98fSaYWYCwBRHAqFhcKlfm-c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "253539109830-gnhd2rd14n7ourhiap23s8t1jer3ta8q.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
