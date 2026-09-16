@@ -1,0 +1,21 @@
+Play Store Privacy Summary — G Sports Center (GSC)
+
+Data collected:
+- Personal info: Firebase UID, email (used for authentication and account management).
+- Financial info: transaction amount, transaction_type, description (stored for accounting in MySQL `financial_transactions`).
+- Media: payment proof images (stored in Firebase Storage or Cloudinary).
+- Device & diagnostics: device model, OS, app version, crash reports.
+- Location: optional (only when user enables location-based features like attendance radius checks).
+
+Shared with:
+- Firebase (Authentication, Firestore, Storage), Cloudinary (if used), and the website backend (CodeIgniter + MySQL). No sale of personal data.
+
+Security & retention:
+- Transport via HTTPS/TLS. Data retained for business/accounting purposes (typically several years) unless deletion is requested and legally allowed.
+
+Permissions used:
+- CAMERA: to capture payment proof images (optional, only when user chooses to use camera).
+- READ/WRITE STORAGE or MEDIA: to select/upload images from gallery (optional).
+- LOCATION: optional, for attendance/location features.
+
+Contact: gmanagement2026@gmail.com
