@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>G-Sports Center</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .logo-stage {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            perspective: 800px;
+        }
+
+        .p {
+            position: absolute;
+            inset: 0;
+            will-change: transform, opacity;
+        }
+
+        .p img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
+        @keyframes breathe {
+            0%, 100% { transform: scale(1);    opacity: 1;  }
+            50%      { transform: scale(1.03); opacity: .85; }
+        }
+    </style>
+</head>
+<body>
+    <div class="logo-stage" id="stage"></div>
+
+    <script>
+        const R = 4, C = 4, GAP = .1;
+        const stage = document.getElementById('stage');
+        const rnd = s => { let x = Math.sin(s * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+        const pieces = [];
+
+        for (let r = 0; r < R; r++) {
+            for (let c = 0; c < C; c++) {
+                const i = r * C + c;
+                const el = document.createElement('div');
+                el.className = 'p';
+
+                const img = document.createElement('img');
+                img.src = 'LOGO (GSC).png';
+                el.appendChild(img);
+
+                /* clip to grid cell */
+                const top = (r / R * 100).toFixed(2);
+                const bot = ((R - r - 1) / R * 100).toFixed(2);
+                const lft = (c / C * 100).toFixed(2);
+                const rgt = ((C - c - 1) / C * 100).toFixed(2);
+                el.style.clipPath = `inset(${top}% ${rgt}% ${bot}% ${lft}%)`;
+
+                /* compute scattered position */
+                const ang = rnd(i * 17 + 1) * 360;
+                const dst = 300 + rnd(i * 31 + 7) * 200;
+                const sx = Math.cos(ang * Math.PI / 180) * dst | 0;
+                const sy = Math.sin(ang * Math.PI / 180) * dst | 0;
+                const rz = (rnd(i * 53 + 13) - .5) * 140 | 0;
+                const rx = (rnd(i * 71 + 29) - .5) * 50 | 0;
+                const ry = (rnd(i * 97 + 43) - .5) * 50 | 0;
+                const scattered = `translate3d(${sx}px,${sy}px,60px) rotateX(${rx}deg) rotateY(${ry}deg) rotate(${rz}deg) scale(.3)`;
+
+                /* initial state: scattered & hidden */
+                el.style.transform = scattered;
+                el.style.opacity = '0';
+
+                pieces.push({ el, i, scattered });
+                stage.appendChild(el);
+            }
+        }
+
+        /* shuffle assembly order */
+        pieces.sort((a, b) => rnd(a.i * 7 + 3) - rnd(b.i * 7 + 3));
+        void stage.offsetWidth;
+
+        const CENTER = 'translate3d(0,0,0) rotateX(0) rotateY(0) rotate(0) scale(1)';
+        const BREATHE_MS = 3000;
+
+        function assemble() {
+            pieces.forEach((p, n) => {
+                const d = (.3 + n * GAP).toFixed(2) + 's';
+                p.el.style.transition = `transform .5s cubic-bezier(.34,1.56,.64,1) ${d}, opacity .5s cubic-bezier(.34,1.56,.64,1) ${d}`;
+                p.el.style.transform = CENTER;
+                p.el.style.opacity = '1';
+            });
+
+            const doneMs = (.3 + (pieces.length - 1) * GAP + .5) * 1000 + 100;
+            setTimeout(() => {
+                stage.style.animation = `breathe ${BREATHE_MS}ms ease-in-out infinite`;
+                setTimeout(() => {
+                    stage.style.animation = 'none';
+                    scatter();
+                }, BREATHE_MS);
+            }, doneMs);
+        }
+
+        function scatter() {
+            const rev = [...pieces].reverse();
+            rev.forEach((p, n) => {
+                const d = (n * GAP * .7).toFixed(2) + 's';
+                p.el.style.transition = `transform .4s cubic-bezier(.55,0,1,.45) ${d}, opacity .4s cubic-bezier(.55,0,1,.45) ${d}`;
+                p.el.style.transform = p.scattered;
+                p.el.style.opacity = '0';
+            });
+
+            const doneMs = ((pieces.length - 1) * GAP * .7 + .4) * 1000 + 600;
+            setTimeout(assemble, doneMs);
+        }
+
+        assemble();
+    </script>
+</body>
+</html>
